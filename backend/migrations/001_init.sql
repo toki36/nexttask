@@ -1,0 +1,24 @@
+CREATE TABLE IF NOT EXISTS task_groups (
+    id UUID PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id UUID PRIMARY KEY,
+    group_id UUID REFERENCES task_groups(id) ON DELETE SET NULL,
+    title VARCHAR NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    deadline TIMESTAMPTZ NOT NULL,
+    estimated_minutes INTEGER NOT NULL,
+    weight INTEGER NOT NULL DEFAULT 1,
+    priority_score DOUBLE PRECISION NOT NULL DEFAULT 0,
+    status VARCHAR NOT NULL DEFAULT 'open',
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);

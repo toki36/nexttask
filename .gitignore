@@ -74,6 +74,9 @@ web_modules/
 
 # dotenv environment variable files
 .env
+.env.*
+!.env.example
+!.env.*.example
 .env.development.local
 .env.test.local
 .env.production.local
@@ -134,3 +137,30 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Go
+bin/
+*.exe
+*.test
+*.out
+coverage.out
+vendor/
+
+# Backend local runtime
+backend/tmp/
+backend/.air.toml
+
+# Docker / local database files
+docker-data/
+postgres-data/
+*.db
+*.sqlite
+*.sqlite3
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
