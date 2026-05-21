@@ -23,10 +23,10 @@ func (h *Handler) ListTaskGroups(c echo.Context) error {
 func (h *Handler) CreateTaskGroup(c echo.Context) error {
 	var req taskGroupRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return errorResponse(c, http.StatusBadRequest, "validation_error", "name is required")
 	}
 	id, err := newID()
 	if err != nil {
@@ -42,10 +42,10 @@ func (h *Handler) CreateTaskGroup(c echo.Context) error {
 func (h *Handler) UpdateTaskGroup(c echo.Context) error {
 	var req taskGroupRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
 	}
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return errorResponse(c, http.StatusBadRequest, "validation_error", "name is required")
 	}
 	var group model.TaskGroup
 	if err := h.db.First(&group, "id = ?", c.Param("id")).Error; err != nil {

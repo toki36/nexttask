@@ -10,7 +10,17 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-type taskRequest struct {
+type createTaskRequest struct {
+	GroupID          *string `json:"group_id"`
+	Title            string  `json:"title"`
+	Description      string  `json:"description"`
+	Deadline         string  `json:"deadline"`
+	EstimatedMinutes int     `json:"estimated_minutes"`
+	Weight           int     `json:"weight"`
+	Status           string  `json:"status"`
+}
+
+type updateTaskRequest struct {
 	GroupID          *string `json:"group_id"`
 	Title            string  `json:"title"`
 	Description      string  `json:"description"`
@@ -40,7 +50,7 @@ func (h *Handler) CreateTask(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	task, err := h.taskFromRequest(req, model.Task{})
+	task, err := h.taskFromRequest(c, req, model.Task{})
 	if err != nil {
 		return err
 	}
@@ -66,7 +76,7 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 	if err := h.db.First(&task, "id = ?", c.Param("id")).Error; err != nil {
 		return err
 	}
-	task, err = h.taskFromRequest(req, task)
+	task, err = h.taskFromRequest(c, req, task)
 	if err != nil {
 		return err
 	}
@@ -87,16 +97,16 @@ func (h *Handler) DeleteTask(c echo.Context) error {
 func bindTaskRequest(c echo.Context) (taskRequest, error) {
 	var req taskRequest
 	if err := c.Bind(&req); err != nil {
-		return req, echo.NewHTTPError(http.StatusBadRequest, "invalid request")
+		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
 	}
 	if req.Title == "" {
-		return req, echo.NewHTTPError(http.StatusBadRequest, "title is required")
+		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "title is required")
 	}
 	if req.Deadline == "" {
-		return req, echo.NewHTTPError(http.StatusBadRequest, "deadline is required")
+		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline is required")
 	}
 	if req.EstimatedMinutes <= 0 {
-		return req, echo.NewHTTPError(http.StatusBadRequest, "estimated_minutes must be greater than 0")
+		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "estimated_minutes must be greater than 0")
 	}
 	if req.Weight <= 0 {
 		req.Weight = 1
@@ -104,10 +114,10 @@ func bindTaskRequest(c echo.Context) (taskRequest, error) {
 	return req, nil
 }
 
-func (h *Handler) taskFromRequest(req taskRequest, task model.Task) (model.Task, error) {
+func (h *Handler) taskFromRequest(c echo.Context, req taskRequest, task model.Task) (model.Task, error) {
 	deadline, err := time.Parse(time.RFC3339, req.Deadline)
 	if err != nil {
-		return task, echo.NewHTTPError(http.StatusBadRequest, "deadline must be RFC3339")
+		return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
 	}
 	task.GroupID = req.GroupID
 	task.Title = req.Title
