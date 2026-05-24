@@ -22,12 +22,12 @@ type createTaskRequest struct {
 
 type updateTaskRequest struct {
 	GroupID          *string `json:"group_id"`
-	Title            string  `json:"title"`
-	Description      string  `json:"description"`
-	Deadline         string  `json:"deadline"`
-	EstimatedMinutes int     `json:"estimated_minutes"`
-	Weight           int     `json:"weight"`
-	Status           string  `json:"status"`
+	Title            *string  `json:"title"`
+	Description      *string  `json:"description"`
+	Deadline         *string  `json:"deadline"`
+	EstimatedMinutes *int     `json:"estimated_minutes"`
+	Weight           *int     `json:"weight"`
+	Status           *string  `json:"status"`
 }
 
 func (h *Handler) ListTasks(c echo.Context) error {
@@ -46,7 +46,7 @@ func (h *Handler) ListTasks(c echo.Context) error {
 }
 
 func (h *Handler) CreateTask(c echo.Context) error {
-	req, err := bindTaskRequest(c)
+	req, err := bindCreateTaskRequest(c)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func bindTaskRequest(c echo.Context) (taskRequest, error) {
 	return req, nil
 }
 
-func (h *Handler) taskFromRequest(c echo.Context, req taskRequest, task model.Task) (model.Task, error) {
+func (h *Handler) taskFromCreateRequest(c echo.Context, req createTaskRequest, task model.Task) (model.Task, error) {
 	deadline, err := time.Parse(time.RFC3339, req.Deadline)
 	if err != nil {
 		return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
@@ -132,6 +132,47 @@ func (h *Handler) taskFromRequest(c echo.Context, req taskRequest, task model.Ta
 	} else if req.Status == string(model.TaskStatusOpen) {
 		task.Status = model.TaskStatusOpen
 		task.CompletedAt = nil
+	}
+	return task, nil
+}
+
+func (h *Handler) applyTaskUpdateRequest(c echo.Context, req updateTaskRequest, task model.Task) (model.Task, error) {
+	if req.GroupID != nil {
+		task.GroupID = req.GroupID
+	}
+	if req.Title != nil {
+		task.Title = *req.Title
+	}
+	if req.Description != nil {
+		task.Description = req.Description
+	}
+	if req.Deadline != nil {
+		deadline, err := time.Parse(time.RFC3339, req.Deadline)
+		if err != nil {
+      return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
+    }
+		task.Deadline = deadline
+	}
+	if req.EstimatedMinutes != nil {
+		task.EstimatedMinutes = req.EstimatedMinutes
+	}
+	if req.Weight != nil {
+		task.Weight = req.Weight
+	}
+	if req.Status != nil {
+		switch *req.Status {
+		case string(model.TaskStatusCompleted):
+			task.Status = model.TaskStatusCompleted
+			if task.CompletedAt == nil {
+				now := time.Now()
+				task.CompletedAt = &now
+			} 
+		case string(model.TaskStatusOpen):	
+			task.Status = model.TaskStatusOpen
+			task.CompletedAt = nil
+		default:
+			return task, errorResponse(c, http.StatusBadRequest, "validation_error", "status must be open or completed")
+		}
 	}
 	return task, nil
 }
