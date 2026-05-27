@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"nexttask/backend/internal/model"
 	"nexttask/backend/internal/priority"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 type createTaskRequest struct {
@@ -17,17 +20,16 @@ type createTaskRequest struct {
 	Deadline         string  `json:"deadline"`
 	EstimatedMinutes int     `json:"estimated_minutes"`
 	Weight           int     `json:"weight"`
-	Status           string  `json:"status"`
 }
 
 type updateTaskRequest struct {
 	GroupID          *string `json:"group_id"`
-	Title            *string  `json:"title"`
-	Description      *string  `json:"description"`
-	Deadline         *string  `json:"deadline"`
-	EstimatedMinutes *int     `json:"estimated_minutes"`
-	Weight           *int     `json:"weight"`
-	Status           *string  `json:"status"`
+	Title            *string `json:"title"`
+	Description      *string `json:"description"`
+	Deadline         *string `json:"deadline"`
+	EstimatedMinutes *int    `json:"estimated_minutes"`
+	Weight           *int    `json:"weight"`
+	Status           *string `json:"status"`
 }
 
 func (h *Handler) ListTasks(c echo.Context) error {
@@ -37,6 +39,9 @@ func (h *Handler) ListTasks(c echo.Context) error {
 		query = query.Where("group_id = ?", groupID)
 	}
 	if status := c.QueryParam("status"); status != "" {
+		if !isValidTaskStatus(status) {
+			return errorResponse(c, http.StatusBadRequest, "validation_error", "status must be open or completed")
+		}
 		query = query.Where("status = ?", status)
 	}
 	if err := query.Find(&tasks).Error; err != nil {
@@ -50,7 +55,7 @@ func (h *Handler) CreateTask(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	task, err := h.taskFromRequest(c, req, model.Task{})
+	task, err := h.taskFromCreateRequest(c, req)
 	if err != nil {
 		return err
 	}
@@ -68,15 +73,18 @@ func (h *Handler) CreateTask(c echo.Context) error {
 }
 
 func (h *Handler) UpdateTask(c echo.Context) error {
-	req, err := bindTaskRequest(c)
+	req, err := bindUpdateTaskRequest(c)
 	if err != nil {
 		return err
 	}
 	var task model.Task
 	if err := h.db.First(&task, "id = ?", c.Param("id")).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errorResponse(c, http.StatusNotFound, "not_found", "task not found")
+		}
 		return err
 	}
-	task, err = h.taskFromRequest(c, req, task)
+	task, err = h.applyTaskUpdateRequest(c, req, task)
 	if err != nil {
 		return err
 	}
@@ -88,17 +96,26 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 }
 
 func (h *Handler) DeleteTask(c echo.Context) error {
-	if err := h.db.Delete(&model.Task{}, "id = ?", c.Param("id")).Error; err != nil {
-		return err
+	result := h.db.Delete(&model.Task{}, "id = ?", c.Param("id"))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errorResponse(c, http.StatusNotFound, "not_found", "task not found")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func bindTaskRequest(c echo.Context) (taskRequest, error) {
-	var req taskRequest
+func bindCreateTaskRequest(c echo.Context) (createTaskRequest, error) {
+	var req createTaskRequest
 	if err := c.Bind(&req); err != nil {
 		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
 	}
+	if err := normalizeGroupID(c, &req.GroupID); err != nil {
+		return req, err
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.Deadline = strings.TrimSpace(req.Deadline)
 	if req.Title == "" {
 		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "title is required")
 	}
@@ -114,10 +131,55 @@ func bindTaskRequest(c echo.Context) (taskRequest, error) {
 	return req, nil
 }
 
-func (h *Handler) taskFromCreateRequest(c echo.Context, req createTaskRequest, task model.Task) (model.Task, error) {
+func bindUpdateTaskRequest(c echo.Context) (updateTaskRequest, error) {
+	var req updateTaskRequest
+	if err := c.Bind(&req); err != nil {
+		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
+	}
+	if err := normalizeGroupID(c, &req.GroupID); err != nil {
+		return req, err
+	}
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			return req, errorResponse(c, http.StatusBadRequest, "validation_error", "title must not be empty")
+		}
+		req.Title = &title
+	}
+	if req.Deadline != nil {
+		deadline := strings.TrimSpace(*req.Deadline)
+		if deadline == "" {
+			return req, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must not be empty")
+		}
+		if _, err := time.Parse(time.RFC3339, deadline); err != nil {
+			return req, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
+		}
+		req.Deadline = &deadline
+	}
+	if req.EstimatedMinutes != nil && *req.EstimatedMinutes <= 0 {
+		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "estimated_minutes must be greater than 0")
+	}
+	if req.Weight != nil && *req.Weight <= 0 {
+		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "weight must be greater than 0")
+	}
+	if req.Status != nil {
+		status := strings.TrimSpace(*req.Status)
+		if !isValidTaskStatus(status) {
+			return req, errorResponse(c, http.StatusBadRequest, "validation_error", "status must be open or completed")
+		}
+		req.Status = &status
+	}
+	return req, nil
+}
+
+func (h *Handler) taskFromCreateRequest(c echo.Context, req createTaskRequest) (model.Task, error) {
+	task := model.Task{}
 	deadline, err := time.Parse(time.RFC3339, req.Deadline)
 	if err != nil {
 		return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
+	}
+	if err := h.ensureTaskGroupExists(c, req.GroupID); err != nil {
+		return task, err
 	}
 	task.GroupID = req.GroupID
 	task.Title = req.Title
@@ -125,39 +187,35 @@ func (h *Handler) taskFromCreateRequest(c echo.Context, req createTaskRequest, t
 	task.Deadline = deadline
 	task.EstimatedMinutes = req.EstimatedMinutes
 	task.Weight = req.Weight
-	if req.Status == string(model.TaskStatusCompleted) && task.CompletedAt == nil {
-		now := time.Now()
-		task.Status = model.TaskStatusCompleted
-		task.CompletedAt = &now
-	} else if req.Status == string(model.TaskStatusOpen) {
-		task.Status = model.TaskStatusOpen
-		task.CompletedAt = nil
-	}
+	task.Status = model.TaskStatusOpen
 	return task, nil
 }
 
 func (h *Handler) applyTaskUpdateRequest(c echo.Context, req updateTaskRequest, task model.Task) (model.Task, error) {
 	if req.GroupID != nil {
+		if err := h.ensureTaskGroupExists(c, req.GroupID); err != nil {
+			return task, err
+		}
 		task.GroupID = req.GroupID
 	}
 	if req.Title != nil {
 		task.Title = *req.Title
 	}
 	if req.Description != nil {
-		task.Description = req.Description
+		task.Description = *req.Description
 	}
 	if req.Deadline != nil {
-		deadline, err := time.Parse(time.RFC3339, req.Deadline)
+		deadline, err := time.Parse(time.RFC3339, *req.Deadline)
 		if err != nil {
-      return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
-    }
+			return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
+		}
 		task.Deadline = deadline
 	}
 	if req.EstimatedMinutes != nil {
-		task.EstimatedMinutes = req.EstimatedMinutes
+		task.EstimatedMinutes = *req.EstimatedMinutes
 	}
 	if req.Weight != nil {
-		task.Weight = req.Weight
+		task.Weight = *req.Weight
 	}
 	if req.Status != nil {
 		switch *req.Status {
@@ -166,13 +224,74 @@ func (h *Handler) applyTaskUpdateRequest(c echo.Context, req updateTaskRequest, 
 			if task.CompletedAt == nil {
 				now := time.Now()
 				task.CompletedAt = &now
-			} 
-		case string(model.TaskStatusOpen):	
+			}
+		case string(model.TaskStatusOpen):
 			task.Status = model.TaskStatusOpen
 			task.CompletedAt = nil
-		default:
-			return task, errorResponse(c, http.StatusBadRequest, "validation_error", "status must be open or completed")
 		}
 	}
 	return task, nil
+}
+
+func (h *Handler) ensureTaskGroupExists(c echo.Context, groupID *string) error {
+	if groupID == nil || *groupID == "" {
+		return nil
+	}
+	var count int64
+	if err := h.db.Model(&model.TaskGroup{}).Where("id = ?", *groupID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		return errorResponse(c, http.StatusBadRequest, "validation_error", "group_id does not exist")
+	}
+	return nil
+}
+
+func isValidTaskStatus(status string) bool {
+	switch status {
+	case string(model.TaskStatusOpen), string(model.TaskStatusCompleted):
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeGroupID(c echo.Context, groupID **string) error {
+	if *groupID == nil {
+		return nil
+	}
+	value := strings.TrimSpace(**groupID)
+	if value == "" {
+		return errorResponse(c, http.StatusBadRequest, "validation_error", "group_id must not be empty")
+	}
+	if !isUUIDLike(value) {
+		return errorResponse(c, http.StatusBadRequest, "validation_error", "group_id must be UUID")
+	}
+	*groupID = &value
+	return nil
+}
+
+func isUUIDLike(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	for i, char := range value {
+		switch i {
+		case 8, 13, 18, 23:
+			if char != '-' {
+				return false
+			}
+		default:
+			if !isHex(char) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isHex(char rune) bool {
+	return ('0' <= char && char <= '9') ||
+		('a' <= char && char <= 'f') ||
+		('A' <= char && char <= 'F')
 }

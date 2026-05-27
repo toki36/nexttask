@@ -25,6 +25,7 @@ func main() {
 
 	e := echo.New()
 	e.HideBanner = true
+	e.HTTPErrorHandler = handler.HTTPErrorHandler
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
