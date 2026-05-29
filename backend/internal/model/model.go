@@ -13,6 +13,8 @@ type User struct {
 
 type TaskGroup struct {
 	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID    string    `json:"user_id" gorm:"type:uuid;not null;index"`
+	User      User      `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	Name      string    `json:"name" gorm:"not null"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -28,6 +30,8 @@ const (
 
 type Task struct {
 	ID               string     `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID           string     `json:"user_id" gorm:"type:uuid;not null;index"`
+	User             User       `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	GroupID          *string    `json:"group_id" gorm:"type:uuid"`
 	Group            *TaskGroup `json:"group,omitempty"`
 	Title            string     `json:"title" gorm:"not null"`

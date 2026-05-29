@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"nexttask/backend/internal/model"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 type taskGroupRequest struct {
@@ -13,14 +15,22 @@ type taskGroupRequest struct {
 }
 
 func (h *Handler) ListTaskGroups(c echo.Context) error {
+	userID, err := currentUserID(c)
+	if err != nil {
+		return err
+	}
 	var groups []model.TaskGroup
-	if err := h.db.Order("created_at asc").Find(&groups).Error; err != nil {
+	if err := h.db.Where("user_id = ?", userID).Order("created_at asc").Find(&groups).Error; err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, groups)
 }
 
 func (h *Handler) CreateTaskGroup(c echo.Context) error {
+	userID, err := currentUserID(c)
+	if err != nil {
+		return err
+	}
 	var req taskGroupRequest
 	if err := c.Bind(&req); err != nil {
 		return errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
@@ -32,7 +42,7 @@ func (h *Handler) CreateTaskGroup(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	group := model.TaskGroup{ID: id, Name: req.Name}
+	group := model.TaskGroup{ID: id, UserID: userID, Name: req.Name}
 	if err := h.db.Create(&group).Error; err != nil {
 		return err
 	}
@@ -40,6 +50,10 @@ func (h *Handler) CreateTaskGroup(c echo.Context) error {
 }
 
 func (h *Handler) UpdateTaskGroup(c echo.Context) error {
+	userID, err := currentUserID(c)
+	if err != nil {
+		return err
+	}
 	var req taskGroupRequest
 	if err := c.Bind(&req); err != nil {
 		return errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
@@ -48,7 +62,10 @@ func (h *Handler) UpdateTaskGroup(c echo.Context) error {
 		return errorResponse(c, http.StatusBadRequest, "validation_error", "name is required")
 	}
 	var group model.TaskGroup
-	if err := h.db.First(&group, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.First(&group, "id = ? AND user_id = ?", c.Param("id"), userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errorResponse(c, http.StatusNotFound, "not_found", "task group not found")
+		}
 		return err
 	}
 	group.Name = req.Name
@@ -59,8 +76,16 @@ func (h *Handler) UpdateTaskGroup(c echo.Context) error {
 }
 
 func (h *Handler) DeleteTaskGroup(c echo.Context) error {
-	if err := h.db.Delete(&model.TaskGroup{}, "id = ?", c.Param("id")).Error; err != nil {
+	userID, err := currentUserID(c)
+	if err != nil {
 		return err
+	}
+	result := h.db.Delete(&model.TaskGroup{}, "id = ? AND user_id = ?", c.Param("id"), userID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return errorResponse(c, http.StatusNotFound, "not_found", "task group not found")
 	}
 	return c.NoContent(http.StatusNoContent)
 }

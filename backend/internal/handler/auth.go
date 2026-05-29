@@ -99,6 +99,41 @@ func (h *Handler) Login(c echo.Context) error {
 	return c.JSON(http.StatusOK, authResponse{Token: token, User: user})
 }
 
+func (h *Handler) RequireAuth(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		authHeader := strings.TrimSpace(c.Request().Header.Get(echo.HeaderAuthorization))
+		if authHeader == "" {
+			return errorResponse(c, http.StatusUnauthorized, "unauthorized", "authorization header is required")
+		}
+		tokenString, ok := strings.CutPrefix(authHeader, "Bearer ")
+		if !ok || strings.TrimSpace(tokenString) == "" {
+			return errorResponse(c, http.StatusUnauthorized, "unauthorized", "bearer token is required")
+		}
+
+		claims := &authClaims{}
+		token, err := jwt.ParseWithClaims(strings.TrimSpace(tokenString), claims, func(token *jwt.Token) (any, error) {
+			if token.Method != jwt.SigningMethodHS256 {
+				return nil, jwt.ErrTokenSignatureInvalid
+			}
+			return h.jwtSecret, nil
+		})
+		if err != nil || !token.Valid || claims.UserID == "" {
+			return errorResponse(c, http.StatusUnauthorized, "unauthorized", "invalid token")
+		}
+
+		c.Set("user_id", claims.UserID)
+		return next(c)
+	}
+}
+
+func currentUserID(c echo.Context) (string, error) {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return "", errorResponse(c, http.StatusUnauthorized, "unauthorized", "authentication is required")
+	}
+	return userID, nil
+}
+
 func bindRegisterRequest(c echo.Context) (authRequest, error) {
 	var req authRequest
 	if err := c.Bind(&req); err != nil {

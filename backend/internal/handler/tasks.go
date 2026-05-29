@@ -33,8 +33,12 @@ type updateTaskRequest struct {
 }
 
 func (h *Handler) ListTasks(c echo.Context) error {
+	userID, err := currentUserID(c)
+	if err != nil {
+		return err
+	}
 	var tasks []model.Task
-	query := h.db.Preload("Group").Order("priority_score desc").Order("deadline asc")
+	query := h.db.Preload("Group").Where("user_id = ?", userID).Order("priority_score desc").Order("deadline asc")
 	if groupID := c.QueryParam("group_id"); groupID != "" {
 		query = query.Where("group_id = ?", groupID)
 	}
@@ -51,11 +55,15 @@ func (h *Handler) ListTasks(c echo.Context) error {
 }
 
 func (h *Handler) CreateTask(c echo.Context) error {
+	userID, err := currentUserID(c)
+	if err != nil {
+		return err
+	}
 	req, err := bindCreateTaskRequest(c)
 	if err != nil {
 		return err
 	}
-	task, err := h.taskFromCreateRequest(c, req)
+	task, err := h.taskFromCreateRequest(c, userID, req)
 	if err != nil {
 		return err
 	}
@@ -73,18 +81,22 @@ func (h *Handler) CreateTask(c echo.Context) error {
 }
 
 func (h *Handler) UpdateTask(c echo.Context) error {
+	userID, err := currentUserID(c)
+	if err != nil {
+		return err
+	}
 	req, err := bindUpdateTaskRequest(c)
 	if err != nil {
 		return err
 	}
 	var task model.Task
-	if err := h.db.First(&task, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.First(&task, "id = ? AND user_id = ?", c.Param("id"), userID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errorResponse(c, http.StatusNotFound, "not_found", "task not found")
 		}
 		return err
 	}
-	task, err = h.applyTaskUpdateRequest(c, req, task)
+	task, err = h.applyTaskUpdateRequest(c, userID, req, task)
 	if err != nil {
 		return err
 	}
@@ -96,7 +108,11 @@ func (h *Handler) UpdateTask(c echo.Context) error {
 }
 
 func (h *Handler) DeleteTask(c echo.Context) error {
-	result := h.db.Delete(&model.Task{}, "id = ?", c.Param("id"))
+	userID, err := currentUserID(c)
+	if err != nil {
+		return err
+	}
+	result := h.db.Delete(&model.Task{}, "id = ? AND user_id = ?", c.Param("id"), userID)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -172,15 +188,16 @@ func bindUpdateTaskRequest(c echo.Context) (updateTaskRequest, error) {
 	return req, nil
 }
 
-func (h *Handler) taskFromCreateRequest(c echo.Context, req createTaskRequest) (model.Task, error) {
+func (h *Handler) taskFromCreateRequest(c echo.Context, userID string, req createTaskRequest) (model.Task, error) {
 	task := model.Task{}
 	deadline, err := time.Parse(time.RFC3339, req.Deadline)
 	if err != nil {
 		return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
 	}
-	if err := h.ensureTaskGroupExists(c, req.GroupID); err != nil {
+	if err := h.ensureTaskGroupExists(c, userID, req.GroupID); err != nil {
 		return task, err
 	}
+	task.UserID = userID
 	task.GroupID = req.GroupID
 	task.Title = req.Title
 	task.Description = req.Description
@@ -191,9 +208,9 @@ func (h *Handler) taskFromCreateRequest(c echo.Context, req createTaskRequest) (
 	return task, nil
 }
 
-func (h *Handler) applyTaskUpdateRequest(c echo.Context, req updateTaskRequest, task model.Task) (model.Task, error) {
+func (h *Handler) applyTaskUpdateRequest(c echo.Context, userID string, req updateTaskRequest, task model.Task) (model.Task, error) {
 	if req.GroupID != nil {
-		if err := h.ensureTaskGroupExists(c, req.GroupID); err != nil {
+		if err := h.ensureTaskGroupExists(c, userID, req.GroupID); err != nil {
 			return task, err
 		}
 		task.GroupID = req.GroupID
@@ -233,12 +250,12 @@ func (h *Handler) applyTaskUpdateRequest(c echo.Context, req updateTaskRequest, 
 	return task, nil
 }
 
-func (h *Handler) ensureTaskGroupExists(c echo.Context, groupID *string) error {
+func (h *Handler) ensureTaskGroupExists(c echo.Context, userID string, groupID *string) error {
 	if groupID == nil || *groupID == "" {
 		return nil
 	}
 	var count int64
-	if err := h.db.Model(&model.TaskGroup{}).Where("id = ?", *groupID).Count(&count).Error; err != nil {
+	if err := h.db.Model(&model.TaskGroup{}).Where("id = ? AND user_id = ?", *groupID, userID).Count(&count).Error; err != nil {
 		return err
 	}
 	if count == 0 {

@@ -12,8 +12,12 @@ import (
 )
 
 func (h *Handler) ExportICS(c echo.Context) error {
+	userID, err := currentUserID(c)
+	if err != nil {
+		return err
+	}
 	var tasks []model.Task
-	if err := h.db.Where("status = ?", model.TaskStatusOpen).Order("deadline asc").Find(&tasks).Error; err != nil {
+	if err := h.db.Where("user_id = ? AND status = ?", userID, model.TaskStatusOpen).Order("deadline asc").Find(&tasks).Error; err != nil {
 		return err
 	}
 

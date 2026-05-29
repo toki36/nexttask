@@ -15,15 +15,16 @@ func RegisterRoutes(e *echo.Echo, db *gorm.DB, jwtSecret string) {
 	api.POST("/auth/register", h.Register)
 	api.POST("/auth/login", h.Login)
 
-	api.GET("/task-groups", h.ListTaskGroups)
-	api.POST("/task-groups", h.CreateTaskGroup)
-	api.PATCH("/task-groups/:id", h.UpdateTaskGroup)
-	api.DELETE("/task-groups/:id", h.DeleteTaskGroup)
+	protected := api.Group("", h.RequireAuth)
+	protected.GET("/task-groups", h.ListTaskGroups)
+	protected.POST("/task-groups", h.CreateTaskGroup)
+	protected.PATCH("/task-groups/:id", h.UpdateTaskGroup)
+	protected.DELETE("/task-groups/:id", h.DeleteTaskGroup)
 
-	api.GET("/tasks", h.ListTasks)
-	api.POST("/tasks", h.CreateTask)
-	api.PATCH("/tasks/:id", h.UpdateTask)
-	api.DELETE("/tasks/:id", h.DeleteTask)
+	protected.GET("/tasks", h.ListTasks)
+	protected.POST("/tasks", h.CreateTask)
+	protected.PATCH("/tasks/:id", h.UpdateTask)
+	protected.DELETE("/tasks/:id", h.DeleteTask)
 
-	api.GET("/export/ics", h.ExportICS)
+	protected.GET("/export/ics", h.ExportICS)
 }
