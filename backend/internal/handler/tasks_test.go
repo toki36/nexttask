@@ -39,7 +39,7 @@ func newTaskTestServer(t *testing.T) (*echo.Echo, *gorm.DB) {
 
 	e := echo.New()
 	e.HTTPErrorHandler = HTTPErrorHandler
-	RegisterRoutes(e, db)
+	RegisterRoutes(e, db, "test-jwt-secret")
 
 	return e, db
 }

@@ -9,6 +9,7 @@ type Config struct {
 	AppEnv           string
 	Port             string
 	DatabaseURL      string
+	JWTSecret        string
 	CORSAllowOrigins []string
 }
 
@@ -17,6 +18,7 @@ func Load() Config {
 		AppEnv:           getEnv("APP_ENV", "development"),
 		Port:             getEnv("PORT", "8080"),
 		DatabaseURL:      getEnv("DATABASE_URL", "postgres://nexttask:nexttask@localhost:5432/nexttask?sslmode=disable"),
+		JWTSecret:        getEnv("JWT_SECRET", "change-me-in-local-development"),
 		CORSAllowOrigins: splitCSV(getEnv("CORS_ALLOW_ORIGINS", "http://localhost:3000")),
 	}
 }

@@ -34,7 +34,7 @@ func main() {
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
 	}))
 
-	handler.RegisterRoutes(e, db)
+	handler.RegisterRoutes(e, db, cfg.JWTSecret)
 
 	e.Logger.Fatal(e.Start(":" + cfg.Port))
 }

@@ -8,11 +8,12 @@ import (
 )
 
 type Handler struct {
-	db *gorm.DB
+	db        *gorm.DB
+	jwtSecret []byte
 }
 
-func New(db *gorm.DB) *Handler {
-	return &Handler{db: db}
+func New(db *gorm.DB, jwtSecret string) *Handler {
+	return &Handler{db: db, jwtSecret: []byte(jwtSecret)}
 }
 
 func newID() (string, error) {

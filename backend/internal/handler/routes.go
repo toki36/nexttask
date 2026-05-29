@@ -6,12 +6,15 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func RegisterRoutes(e *echo.Echo, db *gorm.DB) {
-	h := New(db)
+func RegisterRoutes(e *echo.Echo, db *gorm.DB, jwtSecret string) {
+	h := New(db, jwtSecret)
 
 	e.GET("/health", h.Health)
 
 	api := e.Group("/api")
+	api.POST("/auth/register", h.Register)
+	api.POST("/auth/login", h.Login)
+
 	api.GET("/task-groups", h.ListTaskGroups)
 	api.POST("/task-groups", h.CreateTaskGroup)
 	api.PATCH("/task-groups/:id", h.UpdateTaskGroup)
