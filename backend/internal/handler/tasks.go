@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +19,7 @@ type createTaskRequest struct {
 	GroupID          *string `json:"group_id"`
 	Title            string  `json:"title"`
 	Description      string  `json:"description"`
+	LocationName     *string `json:"location_name"`
 	Deadline         string  `json:"deadline"`
 	EstimatedMinutes int     `json:"estimated_minutes"`
 	Weight           int     `json:"weight"`
@@ -26,10 +29,12 @@ type updateTaskRequest struct {
 	GroupID          *string `json:"group_id"`
 	Title            *string `json:"title"`
 	Description      *string `json:"description"`
+	LocationName     *string `json:"location_name"`
 	Deadline         *string `json:"deadline"`
 	EstimatedMinutes *int    `json:"estimated_minutes"`
 	Weight           *int    `json:"weight"`
 	Status           *string `json:"status"`
+	locationNameSet  bool
 }
 
 func (h *Handler) ListTasks(c echo.Context) error {
@@ -130,6 +135,9 @@ func bindCreateTaskRequest(c echo.Context) (createTaskRequest, error) {
 	if err := normalizeGroupID(c, &req.GroupID); err != nil {
 		return req, err
 	}
+	if err := normalizeLocationName(c, &req.LocationName); err != nil {
+		return req, err
+	}
 	req.Title = strings.TrimSpace(req.Title)
 	req.Deadline = strings.TrimSpace(req.Deadline)
 	if req.Title == "" {
@@ -149,10 +157,28 @@ func bindCreateTaskRequest(c echo.Context) (createTaskRequest, error) {
 
 func bindUpdateTaskRequest(c echo.Context) (updateTaskRequest, error) {
 	var req updateTaskRequest
-	if err := c.Bind(&req); err != nil {
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
 		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
 	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
+	}
+	if _, ok := fields["location_name"]; ok {
+		req.locationNameSet = true
+		if req.LocationName == nil {
+			empty := ""
+			req.LocationName = &empty
+		}
+	}
 	if err := normalizeGroupID(c, &req.GroupID); err != nil {
+		return req, err
+	}
+	if err := normalizeLocationName(c, &req.LocationName); err != nil {
 		return req, err
 	}
 	if req.Title != nil {
@@ -201,6 +227,7 @@ func (h *Handler) taskFromCreateRequest(c echo.Context, userID string, req creat
 	task.GroupID = req.GroupID
 	task.Title = req.Title
 	task.Description = req.Description
+	task.LocationName = req.LocationName
 	task.Deadline = deadline
 	task.EstimatedMinutes = req.EstimatedMinutes
 	task.Weight = req.Weight
@@ -220,6 +247,9 @@ func (h *Handler) applyTaskUpdateRequest(c echo.Context, userID string, req upda
 	}
 	if req.Description != nil {
 		task.Description = *req.Description
+	}
+	if req.locationNameSet {
+		task.LocationName = req.LocationName
 	}
 	if req.Deadline != nil {
 		deadline, err := time.Parse(time.RFC3339, *req.Deadline)
@@ -285,6 +315,22 @@ func normalizeGroupID(c echo.Context, groupID **string) error {
 		return errorResponse(c, http.StatusBadRequest, "validation_error", "group_id must be UUID")
 	}
 	*groupID = &value
+	return nil
+}
+
+func normalizeLocationName(c echo.Context, locationName **string) error {
+	if *locationName == nil {
+		return nil
+	}
+	value := strings.TrimSpace(**locationName)
+	if value == "" {
+		*locationName = nil
+		return nil
+	}
+	if len([]rune(value)) > 255 {
+		return errorResponse(c, http.StatusBadRequest, "validation_error", "location_name must be 255 characters or fewer")
+	}
+	*locationName = &value
 	return nil
 }
 

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     group_id UUID REFERENCES task_groups(id) ON DELETE SET NULL,
     title VARCHAR NOT NULL,
     description TEXT NOT NULL DEFAULT '',
+    location_name TEXT,
     deadline TIMESTAMPTZ NOT NULL,
     estimated_minutes INTEGER NOT NULL,
     weight INTEGER NOT NULL DEFAULT 1,

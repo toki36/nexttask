@@ -36,6 +36,7 @@ type Task struct {
 	Group            *TaskGroup `json:"group,omitempty"`
 	Title            string     `json:"title" gorm:"not null"`
 	Description      string     `json:"description"`
+	LocationName     *string    `json:"location_name"`
 	Deadline         time.Time  `json:"deadline" gorm:"not null;index"`
 	EstimatedMinutes int        `json:"estimated_minutes" gorm:"not null"`
 	Weight           int        `json:"weight" gorm:"not null;default:1"`

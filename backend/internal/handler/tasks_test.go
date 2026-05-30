@@ -211,6 +211,71 @@ func TestPatchTaskUpdatesOnlyProvidedFields(t *testing.T) {
 	}
 }
 
+func TestTaskLocationName(t *testing.T) {
+	e, _ := newTaskTestServer(t)
+	token := registerTestUser(t, e, "task-location@example.com")
+
+	task := createTestTask(t, e, token, `{
+		"title":"library task",
+		"description":"initial",
+		"location_name":"  University Library  ",
+		"deadline":"2026-06-01T23:59:00+09:00",
+		"estimated_minutes":120,
+		"weight":5
+	}`)
+	id := task["id"].(string)
+	if task["location_name"] != "University Library" {
+		t.Fatalf("location_name = %v, want University Library", task["location_name"])
+	}
+
+	patchTitleOnly := performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{"title":"still library"}`, token)
+	if patchTitleOnly.Code != http.StatusOK {
+		t.Fatalf("patch status = %d, want %d, body: %s", patchTitleOnly.Code, http.StatusOK, patchTitleOnly.Body.String())
+	}
+	updated := decodeResponse(t, patchTitleOnly)
+	if updated["location_name"] != "University Library" {
+		t.Fatalf("location_name = %v, want University Library", updated["location_name"])
+	}
+
+	patchLocation := performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{"location_name":" Lab "}`, token)
+	if patchLocation.Code != http.StatusOK {
+		t.Fatalf("patch location status = %d, want %d, body: %s", patchLocation.Code, http.StatusOK, patchLocation.Body.String())
+	}
+	updated = decodeResponse(t, patchLocation)
+	if updated["location_name"] != "Lab" {
+		t.Fatalf("location_name = %v, want Lab", updated["location_name"])
+	}
+
+	clearLocation := performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{"location_name":""}`, token)
+	if clearLocation.Code != http.StatusOK {
+		t.Fatalf("clear location status = %d, want %d, body: %s", clearLocation.Code, http.StatusOK, clearLocation.Body.String())
+	}
+	updated = decodeResponse(t, clearLocation)
+	if updated["location_name"] != nil {
+		t.Fatalf("location_name = %v, want nil", updated["location_name"])
+	}
+}
+
+func TestTaskLocationNameValidation(t *testing.T) {
+	e, _ := newTaskTestServer(t)
+	token := registerTestUser(t, e, "task-location-validation@example.com")
+
+	longLocation := strings.Repeat("a", 256)
+	rec := performRequestWithToken(e, http.MethodPost, "/api/tasks", `{
+		"title":"too long location",
+		"location_name":"`+longLocation+`",
+		"deadline":"2026-06-01T23:59:00+09:00",
+		"estimated_minutes":120,
+		"weight":5
+	}`, token)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if got := errorCode(t, rec); got != "validation_error" {
+		t.Fatalf("error code = %s, want validation_error", got)
+	}
+}
+
 func TestPatchTaskValidationAndNotFound(t *testing.T) {
 	e, _ := newTaskTestServer(t)
 	token := registerTestUser(t, e, "task-patch-validation@example.com")
