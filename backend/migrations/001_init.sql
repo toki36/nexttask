@@ -32,7 +32,21 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS schedules (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    group_id UUID NOT NULL REFERENCES task_groups(id) ON DELETE CASCADE,
+    title VARCHAR NOT NULL,
+    start_time TIMESTAMPTZ NOT NULL,
+    end_time TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_task_groups_user_id ON task_groups(user_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_user_id ON schedules(user_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_group_id ON schedules(group_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_start_time ON schedules(start_time);

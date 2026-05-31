@@ -12,13 +12,30 @@ type User struct {
 }
 
 type TaskGroup struct {
-	ID        string    `json:"id" gorm:"type:uuid;primaryKey"`
-	UserID    string    `json:"user_id" gorm:"type:uuid;not null;index"`
-	User      User      `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Name      string    `json:"name" gorm:"not null"`
+	ID        string     `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID    string     `json:"user_id" gorm:"type:uuid;not null;index"`
+	User      User       `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Name      string     `json:"name" gorm:"not null"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	Tasks     []Task     `json:"-" gorm:"foreignKey:GroupID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+	Schedules []Schedule `json:"-" gorm:"foreignKey:GroupID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+}
+
+type Schedule struct {
+	ID     string `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID string `json:"user_id" gorm:"type:uuid;not null;index"`
+	User   User   `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+
+	GroupID string    `json:"group_id" gorm:"type:uuid;not null;index"`
+	Group   TaskGroup `json:"group,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+
+	Title     string    `json:"title" gorm:"not null"`
+	StartTime time.Time `json:"start_time" gorm:"not null;index"`
+	EndTime   time.Time `json:"end_time" gorm:"not null"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-	Tasks     []Task    `json:"-" gorm:"foreignKey:GroupID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }
 
 type TaskStatus string
