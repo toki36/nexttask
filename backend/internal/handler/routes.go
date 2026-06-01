@@ -26,5 +26,10 @@ func RegisterRoutes(e *echo.Echo, db *gorm.DB, jwtSecret string) {
 	protected.PATCH("/tasks/:id", h.UpdateTask)
 	protected.DELETE("/tasks/:id", h.DeleteTask)
 
+	protected.GET("/schedules", h.ListSchedules)
+	protected.POST("/schedules", h.CreateSchedule)
+	protected.PATCH("/schedules/:id", h.UpdateSchedule)
+	protected.DELETE("/schedules/:id", h.DeleteSchedule)
+
 	protected.GET("/export/ics", h.ExportICS)
 }
