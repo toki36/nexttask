@@ -30,9 +30,10 @@ type Schedule struct {
 	GroupID string    `json:"group_id" gorm:"type:uuid;not null;index"`
 	Group   TaskGroup `json:"group,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
-	Title     string    `json:"title" gorm:"not null"`
-	StartTime time.Time `json:"start_time" gorm:"not null;index"`
-	EndTime   time.Time `json:"end_time" gorm:"not null"`
+	Title        string    `json:"title" gorm:"not null"`
+	LocationName *string   `json:"location_name,omitempty" gorm:"size:255"`
+	StartTime    time.Time `json:"start_time" gorm:"not null;index"`
+	EndTime      time.Time `json:"end_time" gorm:"not null"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

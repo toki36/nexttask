@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -13,17 +15,20 @@ import (
 )
 
 type createScheduleRequest struct {
-	GroupID   string `json:"group_id"`
-	Title     string `json:"title"`
-	StartTime string `json:"start_time"`
-	EndTime   string `json:"end_time"`
+	GroupID      string  `json:"group_id"`
+	Title        string  `json:"title"`
+	LocationName *string `json:"location_name"`
+	StartTime    string  `json:"start_time"`
+	EndTime      string  `json:"end_time"`
 }
 
 type updateScheduleRequest struct {
-	GroupID   *string `json:"group_id"`
-	Title     *string `json:"title"`
-	StartTime *string `json:"start_time"`
-	EndTime   *string `json:"end_time"`
+	GroupID         *string `json:"group_id"`
+	Title           *string `json:"title"`
+	LocationName    *string `json:"location_name"`
+	StartTime       *string `json:"start_time"`
+	EndTime         *string `json:"end_time"`
+	locationNameSet bool
 }
 
 func (h *Handler) ListSchedules(c echo.Context) error {
@@ -69,12 +74,13 @@ func (h *Handler) CreateSchedule(c echo.Context) error {
 		return err
 	}
 	schedule := model.Schedule{
-		ID:        id,
-		UserID:    userID,
-		GroupID:   req.GroupID,
-		Title:     req.Title,
-		StartTime: startTime,
-		EndTime:   endTime,
+		ID:           id,
+		UserID:       userID,
+		GroupID:      req.GroupID,
+		Title:        req.Title,
+		LocationName: req.LocationName,
+		StartTime:    startTime,
+		EndTime:      endTime,
 	}
 	if err := h.db.Create(&schedule).Error; err != nil {
 		return err
@@ -108,6 +114,9 @@ func (h *Handler) UpdateSchedule(c echo.Context) error {
 	}
 	if req.Title != nil {
 		schedule.Title = *req.Title
+	}
+	if req.locationNameSet {
+		schedule.LocationName = req.LocationName
 	}
 	if req.StartTime != nil {
 		startTime, err := parseScheduleTime(c, *req.StartTime, "start_time")
@@ -157,6 +166,9 @@ func bindCreateScheduleRequest(c echo.Context) (createScheduleRequest, error) {
 	req.Title = strings.TrimSpace(req.Title)
 	req.StartTime = strings.TrimSpace(req.StartTime)
 	req.EndTime = strings.TrimSpace(req.EndTime)
+	if err := normalizeLocationName(c, &req.LocationName); err != nil {
+		return req, err
+	}
 	if req.GroupID == "" {
 		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "group_id is required")
 	}
@@ -177,8 +189,23 @@ func bindCreateScheduleRequest(c echo.Context) (createScheduleRequest, error) {
 
 func bindUpdateScheduleRequest(c echo.Context) (updateScheduleRequest, error) {
 	var req updateScheduleRequest
-	if err := c.Bind(&req); err != nil {
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
 		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
+	}
+	if _, ok := fields["location_name"]; ok {
+		req.locationNameSet = true
+		if req.LocationName == nil {
+			empty := ""
+			req.LocationName = &empty
+		}
 	}
 	if req.GroupID != nil {
 		groupID := strings.TrimSpace(*req.GroupID)
@@ -196,6 +223,9 @@ func bindUpdateScheduleRequest(c echo.Context) (updateScheduleRequest, error) {
 			return req, errorResponse(c, http.StatusBadRequest, "validation_error", "title must not be empty")
 		}
 		req.Title = &title
+	}
+	if err := normalizeLocationName(c, &req.LocationName); err != nil {
+		return req, err
 	}
 	if req.StartTime != nil {
 		startTime := strings.TrimSpace(*req.StartTime)

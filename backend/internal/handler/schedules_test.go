@@ -37,6 +37,7 @@ func TestCreateSchedule(t *testing.T) {
 	schedule := createTestSchedule(t, e, token, `{
 		"group_id":"`+groupID+`",
 		"title":"OS work",
+		"location_name":"  Library  ",
 		"start_time":"2026-06-02T10:00:00+09:00",
 		"end_time":"2026-06-02T12:00:00+09:00"
 	}`)
@@ -46,6 +47,9 @@ func TestCreateSchedule(t *testing.T) {
 	}
 	if schedule["group_id"] != groupID {
 		t.Fatalf("group_id = %v, want %s", schedule["group_id"], groupID)
+	}
+	if schedule["location_name"] != "Library" {
+		t.Fatalf("location_name = %v, want Library", schedule["location_name"])
 	}
 }
 
@@ -111,6 +115,16 @@ func TestScheduleValidation(t *testing.T) {
 				"title":"OS work",
 				"start_time":"2026-06-02T12:00:00+09:00",
 				"end_time":"2026-06-02T10:00:00+09:00"
+			}`,
+		},
+		{
+			name: "location too long",
+			body: `{
+				"group_id":"` + groupID + `",
+				"title":"OS work",
+				"location_name":"` + strings.Repeat("a", 256) + `",
+				"start_time":"2026-06-02T10:00:00+09:00",
+				"end_time":"2026-06-02T12:00:00+09:00"
 			}`,
 		},
 	}
@@ -199,6 +213,7 @@ func TestUpdateAndDeleteSchedule(t *testing.T) {
 	schedule := createTestSchedule(t, e, token, `{
 		"group_id":"`+groupID+`",
 		"title":"before",
+		"location_name":"Home",
 		"start_time":"2026-06-02T10:00:00+09:00",
 		"end_time":"2026-06-02T12:00:00+09:00"
 	}`)
@@ -211,6 +226,27 @@ func TestUpdateAndDeleteSchedule(t *testing.T) {
 	updated := decodeResponse(t, update)
 	if updated["title"] != "after" {
 		t.Fatalf("title = %v, want after", updated["title"])
+	}
+	if updated["location_name"] != "Home" {
+		t.Fatalf("location_name = %v, want Home", updated["location_name"])
+	}
+
+	updateLocation := performRequestWithToken(e, http.MethodPatch, "/api/schedules/"+scheduleID, `{"location_name":" Station "}`, token)
+	if updateLocation.Code != http.StatusOK {
+		t.Fatalf("update location status = %d, want %d, body: %s", updateLocation.Code, http.StatusOK, updateLocation.Body.String())
+	}
+	updated = decodeResponse(t, updateLocation)
+	if updated["location_name"] != "Station" {
+		t.Fatalf("location_name = %v, want Station", updated["location_name"])
+	}
+
+	clearLocation := performRequestWithToken(e, http.MethodPatch, "/api/schedules/"+scheduleID, `{"location_name":""}`, token)
+	if clearLocation.Code != http.StatusOK {
+		t.Fatalf("clear location status = %d, want %d, body: %s", clearLocation.Code, http.StatusOK, clearLocation.Body.String())
+	}
+	updated = decodeResponse(t, clearLocation)
+	if updated["location_name"] != nil {
+		t.Fatalf("location_name = %v, want nil", updated["location_name"])
 	}
 
 	deleteRec := performRequestWithToken(e, http.MethodDelete, "/api/schedules/"+scheduleID, "", token)
