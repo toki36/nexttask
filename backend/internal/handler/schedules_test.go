@@ -205,6 +205,51 @@ func TestSchedulesAreScopedByUser(t *testing.T) {
 	}
 }
 
+func TestExportICSSchedules(t *testing.T) {
+	e, _ := newTaskTestServer(t)
+	token := registerTestUser(t, e, "schedule-export@example.com")
+	group := createTestGroup(t, e, token, "OS")
+	groupID := group["id"].(string)
+
+	createTestTask(t, e, token, `{
+		"title":"task should not be exported",
+		"deadline":"2026-06-02T09:00:00+09:00",
+		"estimated_minutes":30,
+		"weight":1
+	}`)
+	createTestSchedule(t, e, token, `{
+		"group_id":"`+groupID+`",
+		"title":"OS, work; review",
+		"location_name":"Lab, A",
+		"start_time":"2026-06-02T10:00:00+09:00",
+		"end_time":"2026-06-02T12:00:00+09:00"
+	}`)
+
+	rec := performRequestWithToken(e, http.MethodGet, "/api/export/ics", "", token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "BEGIN:VCALENDAR\r\n") {
+		t.Fatalf("VCALENDAR missing: %s", body)
+	}
+	if !strings.Contains(body, "SUMMARY:OS\\, work\\; review\r\n") {
+		t.Fatalf("SUMMARY missing or not escaped: %s", body)
+	}
+	if !strings.Contains(body, "LOCATION:Lab\\, A\r\n") {
+		t.Fatalf("LOCATION missing or not escaped: %s", body)
+	}
+	if !strings.Contains(body, "DTSTART:20260602T010000Z\r\n") {
+		t.Fatalf("DTSTART missing: %s", body)
+	}
+	if !strings.Contains(body, "DTEND:20260602T030000Z\r\n") {
+		t.Fatalf("DTEND missing: %s", body)
+	}
+	if strings.Contains(body, "task should not be exported") {
+		t.Fatalf("task was exported: %s", body)
+	}
+}
+
 func TestUpdateAndDeleteSchedule(t *testing.T) {
 	e, _ := newTaskTestServer(t)
 	token := registerTestUser(t, e, "schedule-update@example.com")

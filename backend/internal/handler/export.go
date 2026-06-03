@@ -16,8 +16,8 @@ func (h *Handler) ExportICS(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	var tasks []model.Task
-	if err := h.db.Where("user_id = ? AND status = ?", userID, model.TaskStatusOpen).Order("deadline asc").Find(&tasks).Error; err != nil {
+	var schedules []model.Schedule
+	if err := h.db.Where("user_id = ?", userID).Order("start_time asc").Find(&schedules).Error; err != nil {
 		return err
 	}
 
@@ -26,16 +26,15 @@ func (h *Handler) ExportICS(c echo.Context) error {
 	b.WriteString("VERSION:2.0\r\n")
 	b.WriteString("PRODID:-//NextTask//NextTask Backend//JA\r\n")
 	now := time.Now().UTC().Format("20060102T150405Z")
-	for _, task := range tasks {
-		deadline := task.Deadline.UTC().Format("20060102T150405Z")
+	for _, schedule := range schedules {
 		b.WriteString("BEGIN:VEVENT\r\n")
-		b.WriteString(fmt.Sprintf("UID:%s@nexttask\r\n", task.ID))
+		b.WriteString(fmt.Sprintf("UID:%s@nexttask\r\n", schedule.ID))
 		b.WriteString(fmt.Sprintf("DTSTAMP:%s\r\n", now))
-		b.WriteString(fmt.Sprintf("DTSTART:%s\r\n", deadline))
-		b.WriteString(fmt.Sprintf("DTEND:%s\r\n", task.Deadline.Add(30*time.Minute).UTC().Format("20060102T150405Z")))
-		b.WriteString(fmt.Sprintf("SUMMARY:%s\r\n", escapeICS(task.Title)))
-		if task.Description != "" {
-			b.WriteString(fmt.Sprintf("DESCRIPTION:%s\r\n", escapeICS(task.Description)))
+		b.WriteString(fmt.Sprintf("DTSTART:%s\r\n", schedule.StartTime.UTC().Format("20060102T150405Z")))
+		b.WriteString(fmt.Sprintf("DTEND:%s\r\n", schedule.EndTime.UTC().Format("20060102T150405Z")))
+		b.WriteString(fmt.Sprintf("SUMMARY:%s\r\n", escapeICS(schedule.Title)))
+		if schedule.LocationName != nil {
+			b.WriteString(fmt.Sprintf("LOCATION:%s\r\n", escapeICS(*schedule.LocationName)))
 		}
 		b.WriteString("END:VEVENT\r\n")
 	}
