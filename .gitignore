@@ -90,6 +90,9 @@ web_modules/
 .next
 out
 
+# Browser automation artifacts
+.playwright-mcp/
+
 # Nuxt.js build / generate output
 .nuxt
 dist
