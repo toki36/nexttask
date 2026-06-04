@@ -153,7 +153,7 @@ textarea:focus {
 }
 
 .page {
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 22px 24px 42px;
 }
@@ -239,7 +239,7 @@ textarea:focus {
 
 .dashboard {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -346,6 +346,22 @@ textarea:focus {
   font-weight: 700;
 }
 
+.checkbox-field {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.checkbox-field input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
 .stack {
   display: grid;
   gap: 14px;
@@ -363,6 +379,17 @@ textarea:focus {
   gap: 12px;
   padding: 16px;
   border-bottom: 1px solid var(--border);
+}
+
+.workspace-title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.workspace-subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .tabs {
@@ -394,13 +421,29 @@ textarea:focus {
   gap: 0;
 }
 
+.workspace-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.workspace-column {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.workspace-column + .workspace-column {
+  border-left: 1px solid var(--border);
+}
+
 .list-pane {
   min-width: 0;
   padding: 16px;
 }
 
 .editor-pane {
-  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   background: #fbfcfa;
   padding: 16px;
 }
@@ -557,7 +600,8 @@ textarea:focus {
 @media (max-width: 1040px) {
   .auth-page,
   .dashboard,
-  .content-grid {
+  .content-grid,
+  .workspace-columns {
     grid-template-columns: 1fr;
   }
 
@@ -570,6 +614,10 @@ textarea:focus {
   }
 
   .editor-pane {
+    border-top: 1px solid var(--border);
+  }
+
+  .workspace-column + .workspace-column {
     border-left: 0;
     border-top: 1px solid var(--border);
   }
