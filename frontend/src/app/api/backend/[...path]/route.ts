@@ -21,36 +21,36 @@ async function proxy(request: NextRequest, context: ProxyContext) {
   if (contentType) headers.set("content-type", contentType);
   if (accept) headers.set("accept", accept);
 
-	const init: RequestInit = {
-		method: request.method,
-		headers,
-		cache: "no-store",
-	};
+  const init: RequestInit = {
+    method: request.method,
+    headers,
+    cache: "no-store",
+  };
 
   if (!["GET", "HEAD"].includes(request.method)) {
     init.body = await request.text();
   }
 
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), backendTimeoutMs);
-	init.signal = controller.signal;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), backendTimeoutMs);
+  init.signal = controller.signal;
 
-	let response: Response;
-	try {
-		response = await fetch(target, init);
-	} catch {
-		return Response.json(
-			{
-				error: {
-					code: "backend_unreachable",
-					message: "バックエンドに接続できません。localhost:8080 でバックエンドを起動してください。",
-				},
-			},
-			{ status: 502 },
-		);
-	} finally {
-		clearTimeout(timeout);
-	}
+  let response: Response;
+  try {
+    response = await fetch(target, init);
+  } catch {
+    return Response.json(
+      {
+        error: {
+          code: "backend_unreachable",
+          message: "Backend is unreachable. Start the backend on localhost:8080.",
+        },
+      },
+      { status: 502 },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
   const responseHeaders = new Headers();
   const responseContentType = response.headers.get("content-type");
   const contentDisposition = response.headers.get("content-disposition");

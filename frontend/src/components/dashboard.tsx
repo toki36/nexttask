@@ -4,10 +4,10 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuthView } from "@/components/auth-view";
 import { Stat, StatusMessage } from "@/components/common";
 import { GroupsSidebar } from "@/components/groups-sidebar";
-import { ScheduleForm, ScheduleList } from "@/components/schedules";
+import { ScheduleCalendar, ScheduleForm, ScheduleList } from "@/components/schedules";
 import { TaskForm, TaskList } from "@/components/tasks";
 import { apiBase, apiRequest, errorMessage, tokenKey, userKey } from "@/lib/api";
-import { isAllDayRange, isValidDateRange, toDateTimeLocal, toRFC3339 } from "@/lib/date";
+import { datePart, isAllDayRange, isValidDateRange, toDateTimeLocal, toRFC3339 } from "@/lib/date";
 import { initialScheduleForm, initialTaskForm } from "@/lib/forms";
 import { savedToken, savedUser } from "@/lib/storage";
 import type { AuthMode, AuthResponse, Schedule, Task, TaskGroup, User } from "@/types";
@@ -21,6 +21,8 @@ export function Dashboard() {
   const [groups, setGroups] = useState<TaskGroup[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState("");
   const [selectedGroupID, setSelectedGroupID] = useState("all");
   const [groupName, setGroupName] = useState("");
   const [scheduleForm, setScheduleForm] = useState(initialScheduleForm);
@@ -42,6 +44,11 @@ export function Dashboard() {
     if (selectedGroupID === "all") return schedules;
     return schedules.filter((schedule) => schedule.group_id === selectedGroupID);
   }, [schedules, selectedGroupID]);
+
+  const selectedDateSchedules = useMemo(() => {
+    if (!selectedScheduleDate) return visibleSchedules;
+    return visibleSchedules.filter((schedule) => datePart(toDateTimeLocal(schedule.start_time)) === selectedScheduleDate);
+  }, [selectedScheduleDate, visibleSchedules]);
 
   const visibleTasks = useMemo(() => {
     if (selectedGroupID === "all") return tasks;
@@ -82,7 +89,7 @@ export function Dashboard() {
       if (selectedGroupID !== "all" && !nextGroups.some((group) => group.id === selectedGroupID)) {
         setSelectedGroupID("all");
       }
-      setStatus("同期しました");
+      setStatus("Synced");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -115,7 +122,7 @@ export function Dashboard() {
       window.localStorage.setItem(userKey, JSON.stringify(response.user));
       setToken(response.token);
       setUser(response.user);
-      setStatus("ログインしました");
+      setStatus("Logged in");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -151,7 +158,9 @@ export function Dashboard() {
       setGroupName("");
       setScheduleForm((current) => ({ ...current, group_id: group.id }));
       setTaskForm((current) => ({ ...current, group_id: group.id }));
-      setStatus("グループを作成しました");
+      setCalendarMonth(new Date());
+      setSelectedScheduleDate("");
+      setStatus("Group created");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -161,8 +170,8 @@ export function Dashboard() {
 
   async function deleteGroup(groupID: string) {
     const group = groups.find((item) => item.id === groupID);
-    const name = group?.name ?? "このグループ";
-    if (!window.confirm(`${name} を削除します。紐づく予定も削除されます。`)) return;
+    const name = group?.name ?? "this group";
+    if (!window.confirm(`${name} will be deleted. Linked schedules will also be deleted.`)) return;
 
     setLoading(true);
     setError("");
@@ -175,7 +184,7 @@ export function Dashboard() {
       );
       if (selectedGroupID === groupID) setSelectedGroupID("all");
       if (editingGroupID === groupID) cancelGroupEdit();
-      setStatus("グループを削除しました");
+      setStatus("Group deleted");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -214,7 +223,7 @@ export function Dashboard() {
         current.map((task) => (task.group_id === updated.id && task.group ? { ...task, group: updated } : task)),
       );
       cancelGroupEdit();
-      setStatus("グループ名を更新しました");
+      setStatus("Group renamed");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -225,7 +234,7 @@ export function Dashboard() {
   async function saveSchedule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isValidDateRange(scheduleForm.start_time, scheduleForm.end_time)) {
-      setError("終了は開始より後にしてください");
+      setError("End must be after start");
       return;
     }
 
@@ -253,7 +262,7 @@ export function Dashboard() {
           : [...current, saved],
       );
       resetScheduleForm();
-      setStatus(editingScheduleID ? "予定を更新しました" : "予定を作成しました");
+      setStatus(editingScheduleID ? "Schedule updated" : "Schedule created");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -262,7 +271,7 @@ export function Dashboard() {
   }
 
   async function deleteSchedule(scheduleID: string) {
-    if (!window.confirm("予定を削除します。")) return;
+    if (!window.confirm("Delete this schedule?")) return;
 
     setLoading(true);
     setError("");
@@ -270,7 +279,7 @@ export function Dashboard() {
       await apiRequest<void>(`/schedules/${scheduleID}`, { method: "DELETE" }, token);
       setSchedules((current) => current.filter((schedule) => schedule.id !== scheduleID));
       if (editingScheduleID === scheduleID) resetScheduleForm();
-      setStatus("予定を削除しました");
+      setStatus("Schedule deleted");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -304,7 +313,7 @@ export function Dashboard() {
         editingTaskID ? current.map((item) => (item.id === task.id ? task : item)) : [task, ...current],
       );
       resetTaskForm();
-      setStatus(editingTaskID ? "タスクを更新しました" : "タスクを作成しました");
+      setStatus(editingTaskID ? "Task updated" : "Task created");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -321,7 +330,7 @@ export function Dashboard() {
         body: JSON.stringify({ status: statusValue }),
       }, token);
       setTasks((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-      setStatus(statusValue === "completed" ? "タスクを完了しました" : "タスクを未完了に戻しました");
+      setStatus(statusValue === "completed" ? "Task completed" : "Task reopened");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -330,7 +339,7 @@ export function Dashboard() {
   }
 
   async function deleteTask(taskID: string) {
-    if (!window.confirm("タスクを削除します。")) return;
+    if (!window.confirm("Delete this task?")) return;
 
     setLoading(true);
     setError("");
@@ -338,7 +347,7 @@ export function Dashboard() {
       await apiRequest<void>(`/tasks/${taskID}`, { method: "DELETE" }, token);
       setTasks((current) => current.filter((task) => task.id !== taskID));
       if (editingTaskID === taskID) resetTaskForm();
-      setStatus("タスクを削除しました");
+      setStatus("Task deleted");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -385,7 +394,7 @@ export function Dashboard() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      setStatus("ICSをダウンロードしました");
+      setStatus("ICS downloaded");
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -421,6 +430,7 @@ export function Dashboard() {
     setTaskForm((current) => ({ ...current, group_id: groupID === "all" ? "" : groupID }));
     setEditingTaskID(null);
     setEditingScheduleID(null);
+    setSelectedScheduleDate("");
   }
 
   if (!authReady) {
@@ -435,14 +445,14 @@ export function Dashboard() {
                 <p className="brand-subtitle">Schedule and task workspace</p>
               </div>
             </div>
-            <h1>予定とタスクを同じ流れで整理する</h1>
-            <p>ログイン状態を確認しています。</p>
+            <h1>Plan schedules and tasks in one workspace</h1>
+            <p>Checking your session.</p>
           </div>
         </section>
         <section className="auth-form-wrap">
           <div className="auth-form stack">
-            <h2>読み込み中</h2>
-            <p className="status-line">しばらくお待ちください</p>
+            <h2>Loading</h2>
+            <p className="status-line">Please wait</p>
           </div>
         </section>
       </main>
@@ -472,19 +482,19 @@ export function Dashboard() {
             <div className="brand-mark">N</div>
             <div>
               <h1 className="brand-title">NextTask</h1>
-              <p className="brand-subtitle">{selectedGroup ? selectedGroup.name : "すべてのグループ"}</p>
+              <p className="brand-subtitle">{selectedGroup ? selectedGroup.name : "All groups"}</p>
             </div>
           </div>
           <div className="user-row">
             <span className="user-email">{user.email}</span>
             <button className="btn ghost small" onClick={() => void loadWorkspace()} disabled={loading} type="button">
-              更新
+              Update
             </button>
             <button className="btn ghost small" onClick={downloadICS} disabled={loading} type="button">
               ICS
             </button>
             <button className="btn small" onClick={logout} type="button">
-              ログアウト
+              Log out
             </button>
           </div>
         </div>
@@ -492,10 +502,10 @@ export function Dashboard() {
 
       <div className="page">
         <div className="summary-row">
-          <Stat label="グループ" value={groups.length} />
-          <Stat label="予定" value={schedules.length} />
-          <Stat label="未完了タスク" value={openTaskCount} />
-          <Stat label="表示中" value={visibleTasks.length + visibleSchedules.length} />
+          <Stat label="Group" value={groups.length} />
+          <Stat label="Schedules" value={schedules.length} />
+          <Stat label="Open tasks" value={openTaskCount} />
+          <Stat label="Visible" value={visibleTasks.length + selectedDateSchedules.length} />
         </div>
 
         <div className="dashboard">
@@ -522,8 +532,8 @@ export function Dashboard() {
           <section className="workarea">
             <div className="toolbar">
               <div>
-                <h2 className="workspace-title">作業ボード</h2>
-                <p className="workspace-subtitle">タスクと予定を同時に確認できます</p>
+                <h2 className="workspace-title">Workspace</h2>
+                <p className="workspace-subtitle">View tasks and schedules side by side</p>
               </div>
               <StatusMessage status={status} error={error} />
             </div>
@@ -532,8 +542,8 @@ export function Dashboard() {
               <div className="workspace-column">
                 <div className="section-header">
                   <div>
-                    <h3>タスク</h3>
-                    <p>左側で作業を管理します</p>
+                    <h3>Tasks</h3>
+                    <p>Manage work on the left</p>
                   </div>
                 </div>
                 <div className="list-pane">
@@ -562,14 +572,29 @@ export function Dashboard() {
               <div className="workspace-column">
                 <div className="section-header">
                   <div>
-                    <h3>予定</h3>
-                    <p>右側でカレンダー予定を管理します</p>
+                    <h3>Schedules</h3>
+                    <p>Manage calendar schedules on the right</p>
                   </div>
                 </div>
                 <div className="list-pane">
+                  <ScheduleCalendar
+                    month={calendarMonth}
+                    schedules={visibleSchedules}
+                    selectedDate={selectedScheduleDate}
+                    onMonthChange={setCalendarMonth}
+                    onSelectDate={setSelectedScheduleDate}
+                  />
+                  {selectedScheduleDate ? (
+                    <div className="calendar-filter-row">
+                      <span>{selectedScheduleDate} schedules</span>
+                      <button className="btn ghost small" onClick={() => setSelectedScheduleDate("")} type="button">
+                        Clear
+                      </button>
+                    </div>
+                  ) : null}
                   <ScheduleList
                     groups={groups}
-                    schedules={visibleSchedules}
+                    schedules={selectedDateSchedules}
                     onDelete={deleteSchedule}
                     onEdit={editSchedule}
                     loading={loading}

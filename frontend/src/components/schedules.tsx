@@ -1,6 +1,17 @@
 import type { FormEvent } from "react";
 import type { Schedule, ScheduleFormState, TaskGroup } from "@/types";
-import { datePart, endOfAllDay, formatRange, startOfAllDay, timePart, withDatePart, withTimePart } from "@/lib/date";
+import {
+  dateKey,
+  datePart,
+  endOfAllDay,
+  formatMonthLabel,
+  formatRange,
+  isAllDayRange,
+  startOfAllDay,
+  timePart,
+  withDatePart,
+  withTimePart,
+} from "@/lib/date";
 
 type ScheduleListProps = {
   groups: TaskGroup[];
@@ -20,9 +31,83 @@ type ScheduleFormProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
 
+type ScheduleCalendarProps = {
+  month: Date;
+  schedules: Schedule[];
+  selectedDate: string;
+  onMonthChange: (month: Date) => void;
+  onSelectDate: (date: string) => void;
+};
+
+const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function ScheduleCalendar({
+  month,
+  schedules,
+  selectedDate,
+  onMonthChange,
+  onSelectDate,
+}: ScheduleCalendarProps) {
+  const cells = calendarCells(month);
+
+  return (
+    <div className="calendar">
+      <div className="calendar-toolbar">
+        <button className="btn ghost small" onClick={() => onMonthChange(addMonths(month, -1))} type="button">
+          Previous
+        </button>
+        <h4>{formatMonthLabel(month)}</h4>
+        <button className="btn ghost small" onClick={() => onMonthChange(addMonths(month, 1))} type="button">
+          Next
+        </button>
+      </div>
+      <div className="calendar-weekdays">
+        {weekdays.map((weekday) => (
+          <div key={weekday}>{weekday}</div>
+        ))}
+      </div>
+      <div className="calendar-grid">
+        {cells.map((cell) => {
+          const daySchedules = schedulesForDate(schedules, cell.key);
+          const active = selectedDate === cell.key;
+
+          return (
+            <button
+              className={[
+                "calendar-day",
+                cell.inMonth ? "" : "muted",
+                active ? "active" : "",
+                daySchedules.length > 0 ? "has-items" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              key={cell.key}
+              onClick={() => onSelectDate(active ? "" : cell.key)}
+              type="button"
+            >
+              <span className="calendar-date-number">{cell.date.getDate()}</span>
+              <span className="calendar-items">
+                {daySchedules.slice(0, 2).map((schedule) => (
+                  <span className="calendar-item" key={schedule.id}>
+                    {isAllDayRange(toLocalDateTime(schedule.start_time), toLocalDateTime(schedule.end_time))
+                      ? "All day "
+                      : ""}
+                    {schedule.title}
+                  </span>
+                ))}
+                {daySchedules.length > 2 ? <span className="calendar-more">+{daySchedules.length - 2}</span> : null}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ScheduleList({ groups, schedules, onDelete, onEdit, loading }: ScheduleListProps) {
   if (schedules.length === 0) {
-    return <div className="empty">予定はまだありません</div>;
+    return <div className="empty">No schedules yet</div>;
   }
 
   return (
@@ -39,10 +124,10 @@ export function ScheduleList({ groups, schedules, onDelete, onEdit, loading }: S
           </div>
           <div className="actions">
             <button className="btn ghost small" disabled={loading} onClick={() => onEdit(schedule)} type="button">
-              編集
+              Edit
             </button>
             <button className="btn danger small" disabled={loading} onClick={() => onDelete(schedule.id)} type="button">
-              削除
+              Delete
             </button>
           </div>
         </article>
@@ -64,12 +149,12 @@ export function ScheduleForm({
     <form className="stack" onSubmit={onSubmit}>
       <div className="section-header" style={{ padding: 0, borderBottom: 0 }}>
         <div>
-          <h3>{editing ? "予定編集" : "予定作成"}</h3>
-          <p>グループに予定を紐付けます</p>
+          <h3>{editing ? "Edit schedule" : "Create schedule"}</h3>
+          <p>Attach a schedule to a group</p>
         </div>
       </div>
       <div className="field">
-        <label htmlFor="schedule-title">タイトル</label>
+        <label htmlFor="schedule-title">Title</label>
         <input
           id="schedule-title"
           value={form.title}
@@ -78,14 +163,14 @@ export function ScheduleForm({
         />
       </div>
       <div className="field">
-        <label htmlFor="schedule-group">グループ</label>
+        <label htmlFor="schedule-group">Group</label>
         <select
           id="schedule-group"
           value={form.group_id}
           onChange={(event) => onChange({ ...form, group_id: event.target.value })}
           required
         >
-          <option value="">選択</option>
+          <option value="">Select</option>
           {groups.map((group) => (
             <option key={group.id} value={group.id}>
               {group.name}
@@ -94,12 +179,12 @@ export function ScheduleForm({
         </select>
       </div>
       <div className="field">
-        <label htmlFor="schedule-location">場所名</label>
+        <label htmlFor="schedule-location">Location</label>
         <input
           id="schedule-location"
           value={form.location_name}
           onChange={(event) => onChange({ ...form, location_name: event.target.value })}
-          placeholder="任意"
+          placeholder="Optional"
         />
       </div>
       <label className="checkbox-field" htmlFor="schedule-all-day">
@@ -118,11 +203,11 @@ export function ScheduleForm({
             });
           }}
         />
-        <span>終日</span>
+        <span>All day</span>
       </label>
       <div className="form-grid">
         <div className="field">
-          <label htmlFor="schedule-start-date">{form.all_day ? "日付" : "開始日"}</label>
+          <label htmlFor="schedule-start-date">{form.all_day ? "Date" : "Start date"}</label>
           <input
             id="schedule-start-date"
             type="date"
@@ -141,7 +226,7 @@ export function ScheduleForm({
         {!form.all_day ? (
           <>
             <div className="field">
-              <label htmlFor="schedule-start-time">開始時刻</label>
+              <label htmlFor="schedule-start-time">Start time</label>
               <input
                 id="schedule-start-time"
                 type="time"
@@ -152,7 +237,7 @@ export function ScheduleForm({
               />
             </div>
             <div className="field">
-              <label htmlFor="schedule-end-date">終了日</label>
+              <label htmlFor="schedule-end-date">End date</label>
               <input
                 id="schedule-end-date"
                 type="date"
@@ -162,7 +247,7 @@ export function ScheduleForm({
               />
             </div>
             <div className="field">
-              <label htmlFor="schedule-end-time">終了時刻</label>
+              <label htmlFor="schedule-end-time">End time</label>
               <input
                 id="schedule-end-time"
                 type="time"
@@ -178,11 +263,11 @@ export function ScheduleForm({
       <div className="actions">
         {editing ? (
           <button className="btn ghost" onClick={onCancel} type="button">
-            キャンセル
+            Cancel
           </button>
         ) : null}
         <button className="btn primary" disabled={loading || groups.length === 0} type="submit">
-          {editing ? "更新" : "作成"}
+          {editing ? "Update" : "Create"}
         </button>
       </div>
     </form>
@@ -190,5 +275,36 @@ export function ScheduleForm({
 }
 
 function groupName(groups: TaskGroup[], id: string) {
-  return groups.find((group) => group.id === id)?.name ?? "未分類";
+  return groups.find((group) => group.id === id)?.name ?? "Ungrouped";
+}
+
+function calendarCells(month: Date) {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(first.getDate() - first.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return {
+      date,
+      key: dateKey(date),
+      inMonth: date.getMonth() === month.getMonth(),
+    };
+  });
+}
+
+function addMonths(month: Date, amount: number) {
+  return new Date(month.getFullYear(), month.getMonth() + amount, 1);
+}
+
+function schedulesForDate(schedules: Schedule[], targetDate: string) {
+  return schedules.filter((schedule) => datePart(toLocalDateTime(schedule.start_time)) === targetDate);
+}
+
+function toLocalDateTime(value: string) {
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
 }

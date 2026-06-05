@@ -10,8 +10,8 @@ export function toDateTimeLocal(value: string) {
 }
 
 export function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ja-JP", {
-    month: "2-digit",
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
@@ -22,12 +22,23 @@ export function formatRange(start: string, end: string) {
   return `${formatDateTime(start)} - ${formatDateTime(end)}`;
 }
 
+export function formatMonthLabel(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+  }).format(date);
+}
+
 export function isValidDateRange(start: string, end: string) {
   return Boolean(start && end && new Date(end).getTime() > new Date(start).getTime());
 }
 
 export function datePart(value: string) {
   return value.split("T")[0] ?? "";
+}
+
+export function dateKey(date: Date) {
+  return toDateInputValue(date);
 }
 
 export function timePart(value: string) {

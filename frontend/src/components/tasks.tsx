@@ -23,7 +23,7 @@ type TaskFormProps = {
 
 export function TaskList({ groups, tasks, onDelete, onEdit, onStatus, loading }: TaskListProps) {
   if (tasks.length === 0) {
-    return <div className="empty">タスクはまだありません</div>;
+    return <div className="empty">No tasks yet</div>;
   }
 
   return (
@@ -33,21 +33,21 @@ export function TaskList({ groups, tasks, onDelete, onEdit, onStatus, loading }:
           <div>
             <h3 className="item-title">{task.title}</h3>
             <div className="item-meta">
-              <span className="pill strong">{task.group_id ? groupName(groups, task.group_id) : "グループなし"}</span>
+              <span className="pill strong">{task.group_id ? groupName(groups, task.group_id) : "No group"}</span>
               <span className={task.status === "completed" ? "pill" : "pill warn"}>
-                {task.status === "completed" ? "完了" : "未完了"}
+                {task.status === "completed" ? "Done" : "Open"}
               </span>
               <span className="pill">{formatDateTime(task.deadline)}</span>
-              <span className="pill">{task.estimated_minutes}分</span>
-              <span className="pill">重み {task.weight}</span>
-              <span className="pill">優先度 {task.priority_score.toFixed(1)}</span>
+              <span className="pill">{task.estimated_minutes}min</span>
+              <span className="pill">Weight {task.weight}</span>
+              <span className="pill">Priority {task.priority_score.toFixed(1)}</span>
               {task.location_name ? <span className="pill">{task.location_name}</span> : null}
             </div>
             {task.description ? <p className="status-line">{task.description}</p> : null}
           </div>
           <div className="actions">
             <button className="btn ghost small" disabled={loading} onClick={() => onEdit(task)} type="button">
-              編集
+              Edit
             </button>
             <button
               className="btn ghost small"
@@ -55,10 +55,10 @@ export function TaskList({ groups, tasks, onDelete, onEdit, onStatus, loading }:
               onClick={() => onStatus(task, task.status === "completed" ? "open" : "completed")}
               type="button"
             >
-              {task.status === "completed" ? "戻す" : "完了"}
+              {task.status === "completed" ? "Reopen" : "Done"}
             </button>
             <button className="btn danger small" disabled={loading} onClick={() => onDelete(task.id)} type="button">
-              削除
+              Delete
             </button>
           </div>
         </article>
@@ -80,12 +80,12 @@ export function TaskForm({
     <form className="stack" onSubmit={onSubmit}>
       <div className="section-header" style={{ padding: 0, borderBottom: 0 }}>
         <div>
-          <h3>{editing ? "タスク編集" : "タスク作成"}</h3>
-          <p>予定に向けた作業を追加します</p>
+          <h3>{editing ? "Edit task" : "Create task"}</h3>
+          <p>Add work that supports a schedule</p>
         </div>
       </div>
       <div className="field">
-        <label htmlFor="task-title">タイトル</label>
+        <label htmlFor="task-title">Title</label>
         <input
           id="task-title"
           value={form.title}
@@ -94,13 +94,13 @@ export function TaskForm({
         />
       </div>
       <div className="field">
-        <label htmlFor="task-group">グループ</label>
+        <label htmlFor="task-group">Group</label>
         <select
           id="task-group"
           value={form.group_id}
           onChange={(event) => onChange({ ...form, group_id: event.target.value })}
         >
-          <option value="">なし</option>
+          <option value="">None</option>
           {groups.map((group) => (
             <option key={group.id} value={group.id}>
               {group.name}
@@ -109,7 +109,7 @@ export function TaskForm({
         </select>
       </div>
       <div className="field">
-        <label htmlFor="task-description">説明</label>
+        <label htmlFor="task-description">Description</label>
         <textarea
           id="task-description"
           value={form.description}
@@ -117,17 +117,17 @@ export function TaskForm({
         />
       </div>
       <div className="field">
-        <label htmlFor="task-location">場所名</label>
+        <label htmlFor="task-location">Location</label>
         <input
           id="task-location"
           value={form.location_name}
           onChange={(event) => onChange({ ...form, location_name: event.target.value })}
-          placeholder="任意"
+          placeholder="Optional"
         />
       </div>
       <div className="form-grid">
         <div className="field">
-          <label htmlFor="task-deadline-date">期限日</label>
+          <label htmlFor="task-deadline-date">Due date</label>
           <input
             id="task-deadline-date"
             type="date"
@@ -137,7 +137,7 @@ export function TaskForm({
           />
         </div>
         <div className="field">
-          <label htmlFor="task-deadline-time">期限時刻</label>
+          <label htmlFor="task-deadline-time">Due time</label>
           <input
             id="task-deadline-time"
             type="time"
@@ -150,7 +150,7 @@ export function TaskForm({
       </div>
       <div className="form-grid">
         <div className="field">
-          <label htmlFor="task-minutes">見積分</label>
+          <label htmlFor="task-minutes">Estimate minutes</label>
           <input
             id="task-minutes"
             min={1}
@@ -161,7 +161,7 @@ export function TaskForm({
           />
         </div>
         <div className="field">
-          <label htmlFor="task-weight">重み</label>
+          <label htmlFor="task-weight">Weight</label>
           <input
             id="task-weight"
             min={1}
@@ -175,11 +175,11 @@ export function TaskForm({
       <div className="actions">
         {editing ? (
           <button className="btn ghost" onClick={onCancel} type="button">
-            キャンセル
+            Cancel
           </button>
         ) : null}
         <button className="btn primary" disabled={loading} type="submit">
-          {editing ? "更新" : "作成"}
+          {editing ? "Update" : "Create"}
         </button>
       </div>
     </form>
@@ -187,5 +187,5 @@ export function TaskForm({
 }
 
 function groupName(groups: TaskGroup[], id: string) {
-  return groups.find((group) => group.id === id)?.name ?? "未分類";
+  return groups.find((group) => group.id === id)?.name ?? "Ungrouped";
 }

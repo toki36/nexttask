@@ -44,8 +44,8 @@ export function GroupsSidebar({
     <aside className="sidebar">
       <div className="section-header">
         <div>
-          <h2>グループ</h2>
-          <p>予定とタスクのまとまり</p>
+          <h2>Group</h2>
+          <p>Organize related schedules and tasks</p>
         </div>
       </div>
       <div className="group-list">
@@ -54,7 +54,7 @@ export function GroupsSidebar({
           onClick={() => onSelectGroup("all")}
           type="button"
         >
-          <span className="group-name">すべて</span>
+          <span className="group-name">All</span>
           <span className="group-count">{schedulesCount}</span>
         </button>
         {groups.map((group) => (
@@ -73,7 +73,7 @@ export function GroupsSidebar({
         {editingGroupID ? (
           <form className="stack" onSubmit={onSaveGroupName}>
             <div className="field">
-              <label htmlFor="group-edit-name">グループ名編集</label>
+              <label htmlFor="group-edit-name">Edit group name</label>
               <input
                 id="group-edit-name"
                 value={groupEditName}
@@ -82,36 +82,36 @@ export function GroupsSidebar({
             </div>
             <div className="actions">
               <button className="btn ghost" onClick={onCancelGroupEdit} type="button">
-                キャンセル
+                Cancel
               </button>
               <button className="btn primary" disabled={loading || !groupEditName.trim()} type="submit">
-                更新
+                Update
               </button>
             </div>
           </form>
         ) : (
           <form className="stack" onSubmit={onCreateGroup}>
             <div className="field">
-              <label htmlFor="group-name">新規グループ</label>
+              <label htmlFor="group-name">New group</label>
               <input
                 id="group-name"
                 value={groupName}
                 onChange={(event) => onGroupNameChange(event.target.value)}
-                placeholder="例: 研究発表"
+                placeholder="Example: Research presentation"
               />
             </div>
             <button className="btn primary" disabled={loading || !groupName.trim()} type="submit">
-              グループ作成
+              Create group
             </button>
           </form>
         )}
         {selectedGroup ? (
           <div className="actions">
             <button className="btn ghost" disabled={loading} onClick={() => onStartGroupEdit(selectedGroup)} type="button">
-              名前変更
+              Rename
             </button>
             <button className="btn danger" disabled={loading} onClick={() => onDeleteGroup(selectedGroup.id)} type="button">
-              削除
+              Delete
             </button>
           </div>
         ) : null}
