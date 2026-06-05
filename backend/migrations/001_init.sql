@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS schedules (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    group_id UUID NOT NULL REFERENCES task_groups(id) ON DELETE CASCADE,
+    group_id UUID REFERENCES task_groups(id) ON DELETE SET NULL,
     title VARCHAR NOT NULL,
     location_name VARCHAR(255),
     start_time TIMESTAMPTZ NOT NULL,

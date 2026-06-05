@@ -15,7 +15,7 @@ import (
 )
 
 type createScheduleRequest struct {
-	GroupID      string  `json:"group_id"`
+	GroupID      *string `json:"group_id"`
 	Title        string  `json:"title"`
 	LocationName *string `json:"location_name"`
 	StartTime    string  `json:"start_time"`
@@ -28,6 +28,7 @@ type updateScheduleRequest struct {
 	LocationName    *string `json:"location_name"`
 	StartTime       *string `json:"start_time"`
 	EndTime         *string `json:"end_time"`
+	groupIDSet      bool
 	locationNameSet bool
 }
 
@@ -107,10 +108,12 @@ func (h *Handler) UpdateSchedule(c echo.Context) error {
 	}
 
 	if req.GroupID != nil {
-		if err := h.ensureScheduleGroupExists(c, userID, *req.GroupID); err != nil {
+		if err := h.ensureScheduleGroupExists(c, userID, req.GroupID); err != nil {
 			return err
 		}
-		schedule.GroupID = *req.GroupID
+	}
+	if req.groupIDSet {
+		schedule.GroupID = req.GroupID
 	}
 	if req.Title != nil {
 		schedule.Title = *req.Title
@@ -162,18 +165,14 @@ func bindCreateScheduleRequest(c echo.Context) (createScheduleRequest, error) {
 	if err := c.Bind(&req); err != nil {
 		return req, errorResponse(c, http.StatusBadRequest, "invalid_request", "invalid request")
 	}
-	req.GroupID = strings.TrimSpace(req.GroupID)
+	if err := normalizeGroupID(c, &req.GroupID); err != nil {
+		return req, err
+	}
 	req.Title = strings.TrimSpace(req.Title)
 	req.StartTime = strings.TrimSpace(req.StartTime)
 	req.EndTime = strings.TrimSpace(req.EndTime)
 	if err := normalizeLocationName(c, &req.LocationName); err != nil {
 		return req, err
-	}
-	if req.GroupID == "" {
-		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "group_id is required")
-	}
-	if !isUUIDLike(req.GroupID) {
-		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "group_id must be UUID")
 	}
 	if req.Title == "" {
 		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "title is required")
@@ -207,15 +206,11 @@ func bindUpdateScheduleRequest(c echo.Context) (updateScheduleRequest, error) {
 			req.LocationName = &empty
 		}
 	}
-	if req.GroupID != nil {
-		groupID := strings.TrimSpace(*req.GroupID)
-		if groupID == "" {
-			return req, errorResponse(c, http.StatusBadRequest, "validation_error", "group_id must not be empty")
-		}
-		if !isUUIDLike(groupID) {
-			return req, errorResponse(c, http.StatusBadRequest, "validation_error", "group_id must be UUID")
-		}
-		req.GroupID = &groupID
+	if _, ok := fields["group_id"]; ok {
+		req.groupIDSet = true
+	}
+	if err := normalizeGroupID(c, &req.GroupID); err != nil {
+		return req, err
 	}
 	if req.Title != nil {
 		title := strings.TrimSpace(*req.Title)
@@ -267,9 +262,12 @@ func parseScheduleTime(c echo.Context, value string, field string) (time.Time, e
 	return parsed, nil
 }
 
-func (h *Handler) ensureScheduleGroupExists(c echo.Context, userID string, groupID string) error {
+func (h *Handler) ensureScheduleGroupExists(c echo.Context, userID string, groupID *string) error {
+	if groupID == nil || *groupID == "" {
+		return nil
+	}
 	var count int64
-	if err := h.db.Model(&model.TaskGroup{}).Where("id = ? AND user_id = ?", groupID, userID).Count(&count).Error; err != nil {
+	if err := h.db.Model(&model.TaskGroup{}).Where("id = ? AND user_id = ?", *groupID, userID).Count(&count).Error; err != nil {
 		return err
 	}
 	if count == 0 {

@@ -51,6 +51,15 @@ func TestCreateSchedule(t *testing.T) {
 	if schedule["location_name"] != "Library" {
 		t.Fatalf("location_name = %v, want Library", schedule["location_name"])
 	}
+
+	ungrouped := createTestSchedule(t, e, token, `{
+		"title":"No group schedule",
+		"start_time":"2026-06-03T10:00:00+09:00",
+		"end_time":"2026-06-03T12:00:00+09:00"
+	}`)
+	if ungrouped["group_id"] != nil {
+		t.Fatalf("group_id = %v, want nil", ungrouped["group_id"])
+	}
 }
 
 func TestScheduleAPIsRequireAuth(t *testing.T) {
@@ -92,8 +101,9 @@ func TestScheduleValidation(t *testing.T) {
 		body string
 	}{
 		{
-			name: "missing group",
+			name: "invalid group",
 			body: `{
+				"group_id":"not-a-uuid",
 				"title":"OS work",
 				"start_time":"2026-06-02T10:00:00+09:00",
 				"end_time":"2026-06-02T12:00:00+09:00"
@@ -292,6 +302,15 @@ func TestUpdateAndDeleteSchedule(t *testing.T) {
 	updated = decodeResponse(t, clearLocation)
 	if updated["location_name"] != nil {
 		t.Fatalf("location_name = %v, want nil", updated["location_name"])
+	}
+
+	clearGroup := performRequestWithToken(e, http.MethodPatch, "/api/schedules/"+scheduleID, `{"group_id":null}`, token)
+	if clearGroup.Code != http.StatusOK {
+		t.Fatalf("clear group status = %d, want %d, body: %s", clearGroup.Code, http.StatusOK, clearGroup.Body.String())
+	}
+	updated = decodeResponse(t, clearGroup)
+	if updated["group_id"] != nil {
+		t.Fatalf("group_id = %v, want nil", updated["group_id"])
 	}
 
 	deleteRec := performRequestWithToken(e, http.MethodDelete, "/api/schedules/"+scheduleID, "", token)

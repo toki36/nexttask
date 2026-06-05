@@ -4,7 +4,6 @@ import type { TaskGroup } from "@/types";
 type GroupsSidebarProps = {
   editingGroupID: string | null;
   groupEditName: string;
-  groupName: string;
   groupScheduleCounts: Record<string, number>;
   groups: TaskGroup[];
   loading: boolean;
@@ -12,10 +11,9 @@ type GroupsSidebarProps = {
   selectedGroup: TaskGroup | null;
   selectedGroupID: string;
   onCancelGroupEdit: () => void;
-  onCreateGroup: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onDeleteGroup: (groupID: string) => Promise<void>;
   onGroupEditNameChange: (name: string) => void;
-  onGroupNameChange: (name: string) => void;
+  onOpenCreateGroup: () => void;
   onSaveGroupName: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onSelectGroup: (groupID: string) => void;
   onStartGroupEdit: (group: TaskGroup) => void;
@@ -24,7 +22,6 @@ type GroupsSidebarProps = {
 export function GroupsSidebar({
   editingGroupID,
   groupEditName,
-  groupName,
   groupScheduleCounts,
   groups,
   loading,
@@ -32,10 +29,9 @@ export function GroupsSidebar({
   selectedGroup,
   selectedGroupID,
   onCancelGroupEdit,
-  onCreateGroup,
   onDeleteGroup,
   onGroupEditNameChange,
-  onGroupNameChange,
+  onOpenCreateGroup,
   onSaveGroupName,
   onSelectGroup,
   onStartGroupEdit,
@@ -90,20 +86,9 @@ export function GroupsSidebar({
             </div>
           </form>
         ) : (
-          <form className="stack" onSubmit={onCreateGroup}>
-            <div className="field">
-              <label htmlFor="group-name">New group</label>
-              <input
-                id="group-name"
-                value={groupName}
-                onChange={(event) => onGroupNameChange(event.target.value)}
-                placeholder="Example: Research presentation"
-              />
-            </div>
-            <button className="btn primary" disabled={loading || !groupName.trim()} type="submit">
-              Create group
-            </button>
-          </form>
+          <button className="btn primary" disabled={loading} onClick={onOpenCreateGroup} type="button">
+            New group
+          </button>
         )}
         {selectedGroup ? (
           <div className="actions">

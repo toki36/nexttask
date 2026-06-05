@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuthView } from "@/components/auth-view";
-import { Stat, StatusMessage } from "@/components/common";
+import { Modal, Stat, StatusMessage } from "@/components/common";
 import { GroupsSidebar } from "@/components/groups-sidebar";
 import { ScheduleCalendar, ScheduleForm, ScheduleList } from "@/components/schedules";
 import { TaskForm, TaskList } from "@/components/tasks";
@@ -11,6 +11,8 @@ import { datePart, isAllDayRange, isValidDateRange, toDateTimeLocal, toRFC3339 }
 import { initialScheduleForm, initialTaskForm } from "@/lib/forms";
 import { savedToken, savedUser } from "@/lib/storage";
 import type { AuthMode, AuthResponse, Schedule, Task, TaskGroup, User } from "@/types";
+
+type ActiveModal = "group" | "task" | "schedule" | null;
 
 export function Dashboard() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -31,6 +33,7 @@ export function Dashboard() {
   const [editingTaskID, setEditingTaskID] = useState<string | null>(null);
   const [editingGroupID, setEditingGroupID] = useState<string | null>(null);
   const [groupEditName, setGroupEditName] = useState("");
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,6 +60,7 @@ export function Dashboard() {
 
   const groupScheduleCounts = useMemo(() => {
     return schedules.reduce<Record<string, number>>((counts, schedule) => {
+      if (!schedule.group_id) return counts;
       counts[schedule.group_id] = (counts[schedule.group_id] ?? 0) + 1;
       return counts;
     }, {});
@@ -160,6 +164,7 @@ export function Dashboard() {
       setTaskForm((current) => ({ ...current, group_id: group.id }));
       setCalendarMonth(new Date());
       setSelectedScheduleDate("");
+      setActiveModal(null);
       setStatus("Group created");
     } catch (err) {
       setError(errorMessage(err));
@@ -171,14 +176,18 @@ export function Dashboard() {
   async function deleteGroup(groupID: string) {
     const group = groups.find((item) => item.id === groupID);
     const name = group?.name ?? "this group";
-    if (!window.confirm(`${name} will be deleted. Linked schedules will also be deleted.`)) return;
+    if (!window.confirm(`${name} will be deleted. Linked schedules will move to No group.`)) return;
 
     setLoading(true);
     setError("");
     try {
       await apiRequest<void>(`/task-groups/${groupID}`, { method: "DELETE" }, token);
       setGroups((current) => current.filter((group) => group.id !== groupID));
-      setSchedules((current) => current.filter((schedule) => schedule.group_id !== groupID));
+      setSchedules((current) =>
+        current.map((schedule) =>
+          schedule.group_id === groupID ? { ...schedule, group_id: null, group: null } : schedule,
+        ),
+      );
       setTasks((current) =>
         current.map((task) => (task.group_id === groupID ? { ...task, group_id: null, group: null } : task)),
       );
@@ -243,7 +252,7 @@ export function Dashboard() {
     try {
       const body = {
         title: scheduleForm.title,
-        group_id: scheduleForm.group_id,
+        group_id: scheduleForm.group_id || null,
         location_name: scheduleForm.location_name,
         start_time: toRFC3339(scheduleForm.start_time),
         end_time: toRFC3339(scheduleForm.end_time),
@@ -262,6 +271,7 @@ export function Dashboard() {
           : [...current, saved],
       );
       resetScheduleForm();
+      setActiveModal(null);
       setStatus(editingScheduleID ? "Schedule updated" : "Schedule created");
     } catch (err) {
       setError(errorMessage(err));
@@ -313,6 +323,7 @@ export function Dashboard() {
         editingTaskID ? current.map((item) => (item.id === task.id ? task : item)) : [task, ...current],
       );
       resetTaskForm();
+      setActiveModal(null);
       setStatus(editingTaskID ? "Task updated" : "Task created");
     } catch (err) {
       setError(errorMessage(err));
@@ -357,6 +368,7 @@ export function Dashboard() {
 
   function editTask(task: Task) {
     setEditingTaskID(task.id);
+    setActiveModal("task");
     setTaskForm({
       title: task.title,
       description: task.description,
@@ -374,6 +386,20 @@ export function Dashboard() {
       ...initialTaskForm,
       group_id: selectedGroupID === "all" ? "" : selectedGroupID,
     });
+  }
+
+  function openTaskForm() {
+    setEditingTaskID(null);
+    setTaskForm({
+      ...initialTaskForm,
+      group_id: selectedGroupID === "all" ? "" : selectedGroupID,
+    });
+    setActiveModal("task");
+  }
+
+  function closeTaskForm() {
+    resetTaskForm();
+    setActiveModal(null);
   }
 
   async function downloadICS() {
@@ -406,9 +432,10 @@ export function Dashboard() {
     const startTime = toDateTimeLocal(schedule.start_time);
     const endTime = toDateTimeLocal(schedule.end_time);
     setEditingScheduleID(schedule.id);
+    setActiveModal("schedule");
     setScheduleForm({
       title: schedule.title,
-      group_id: schedule.group_id,
+      group_id: schedule.group_id ?? "",
       location_name: schedule.location_name ?? "",
       all_day: isAllDayRange(startTime, endTime),
       start_time: startTime,
@@ -424,12 +451,37 @@ export function Dashboard() {
     });
   }
 
+  function openScheduleForm() {
+    setEditingScheduleID(null);
+    setScheduleForm({
+      ...initialScheduleForm,
+      group_id: selectedGroupID === "all" ? "" : selectedGroupID,
+    });
+    setActiveModal("schedule");
+  }
+
+  function closeScheduleForm() {
+    resetScheduleForm();
+    setActiveModal(null);
+  }
+
+  function openGroupForm() {
+    setGroupName("");
+    setActiveModal("group");
+  }
+
+  function closeGroupForm() {
+    setGroupName("");
+    setActiveModal(null);
+  }
+
   function selectGroup(groupID: string) {
     setSelectedGroupID(groupID);
     setScheduleForm((current) => ({ ...current, group_id: groupID === "all" ? "" : groupID }));
     setTaskForm((current) => ({ ...current, group_id: groupID === "all" ? "" : groupID }));
     setEditingTaskID(null);
     setEditingScheduleID(null);
+    setActiveModal(null);
     setSelectedScheduleDate("");
   }
 
@@ -512,7 +564,6 @@ export function Dashboard() {
           <GroupsSidebar
             editingGroupID={editingGroupID}
             groupEditName={groupEditName}
-            groupName={groupName}
             groupScheduleCounts={groupScheduleCounts}
             groups={groups}
             loading={loading}
@@ -520,10 +571,9 @@ export function Dashboard() {
             selectedGroup={selectedGroup}
             selectedGroupID={selectedGroupID}
             onCancelGroupEdit={cancelGroupEdit}
-            onCreateGroup={createGroup}
             onDeleteGroup={deleteGroup}
             onGroupEditNameChange={setGroupEditName}
-            onGroupNameChange={setGroupName}
+            onOpenCreateGroup={openGroupForm}
             onSaveGroupName={saveGroupName}
             onSelectGroup={selectGroup}
             onStartGroupEdit={startGroupEdit}
@@ -545,6 +595,9 @@ export function Dashboard() {
                     <h3>Tasks</h3>
                     <p>Manage work on the left</p>
                   </div>
+                  <button className="btn primary small" disabled={loading} onClick={openTaskForm} type="button">
+                    New task
+                  </button>
                 </div>
                 <div className="list-pane">
                   <TaskList
@@ -556,17 +609,6 @@ export function Dashboard() {
                     loading={loading}
                   />
                 </div>
-                <div className="editor-pane">
-                  <TaskForm
-                    editing={Boolean(editingTaskID)}
-                    form={taskForm}
-                    groups={groups}
-                    loading={loading}
-                    onCancel={resetTaskForm}
-                    onChange={setTaskForm}
-                    onSubmit={saveTask}
-                  />
-                </div>
               </div>
 
               <div className="workspace-column">
@@ -575,6 +617,14 @@ export function Dashboard() {
                     <h3>Schedules</h3>
                     <p>Manage calendar schedules on the right</p>
                   </div>
+                  <button
+                    className="btn primary small"
+                    disabled={loading}
+                    onClick={openScheduleForm}
+                    type="button"
+                  >
+                    New schedule
+                  </button>
                 </div>
                 <div className="list-pane">
                   <ScheduleCalendar
@@ -600,22 +650,61 @@ export function Dashboard() {
                     loading={loading}
                   />
                 </div>
-                <div className="editor-pane">
-                  <ScheduleForm
-                    editing={Boolean(editingScheduleID)}
-                    form={scheduleForm}
-                    groups={groups}
-                    loading={loading}
-                    onCancel={resetScheduleForm}
-                    onChange={setScheduleForm}
-                    onSubmit={saveSchedule}
-                  />
-                </div>
               </div>
             </div>
           </section>
         </div>
       </div>
+      {activeModal === "group" ? (
+        <Modal title="New group" onClose={closeGroupForm}>
+          <form className="stack" onSubmit={createGroup}>
+            <div className="field">
+              <label htmlFor="group-name">Group name</label>
+              <input
+                id="group-name"
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+                placeholder="Example: Research presentation"
+                required
+              />
+            </div>
+            <div className="actions">
+              <button className="btn ghost" onClick={closeGroupForm} type="button">
+                Cancel
+              </button>
+              <button className="btn primary" disabled={loading || !groupName.trim()} type="submit">
+                Create
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+      {activeModal === "task" ? (
+        <Modal title={editingTaskID ? "Edit task" : "New task"} onClose={closeTaskForm}>
+          <TaskForm
+            editing={Boolean(editingTaskID)}
+            form={taskForm}
+            groups={groups}
+            loading={loading}
+            onCancel={closeTaskForm}
+            onChange={setTaskForm}
+            onSubmit={saveTask}
+          />
+        </Modal>
+      ) : null}
+      {activeModal === "schedule" ? (
+        <Modal title={editingScheduleID ? "Edit schedule" : "New schedule"} onClose={closeScheduleForm}>
+          <ScheduleForm
+            editing={Boolean(editingScheduleID)}
+            form={scheduleForm}
+            groups={groups}
+            loading={loading}
+            onCancel={closeScheduleForm}
+            onChange={setScheduleForm}
+            onSubmit={saveSchedule}
+          />
+        </Modal>
+      ) : null}
     </main>
   );
 }

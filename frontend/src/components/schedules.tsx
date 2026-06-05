@@ -117,7 +117,7 @@ export function ScheduleList({ groups, schedules, onDelete, onEdit, loading }: S
           <div>
             <h3 className="item-title">{schedule.title}</h3>
             <div className="item-meta">
-              <span className="pill strong">{groupName(groups, schedule.group_id)}</span>
+              <span className="pill strong">{schedule.group_id ? groupName(groups, schedule.group_id) : "No group"}</span>
               <span className="pill">{formatRange(schedule.start_time, schedule.end_time)}</span>
               {schedule.location_name ? <span className="pill">{schedule.location_name}</span> : null}
             </div>
@@ -168,9 +168,8 @@ export function ScheduleForm({
           id="schedule-group"
           value={form.group_id}
           onChange={(event) => onChange({ ...form, group_id: event.target.value })}
-          required
         >
-          <option value="">Select</option>
+          <option value="">None</option>
           {groups.map((group) => (
             <option key={group.id} value={group.id}>
               {group.name}

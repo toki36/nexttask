@@ -20,8 +20,8 @@ export type TaskGroup = {
 export type Schedule = {
   id: string;
   user_id: string;
-  group_id: string;
-  group?: TaskGroup;
+  group_id?: string | null;
+  group?: TaskGroup | null;
   title: string;
   location_name?: string | null;
   start_time: string;

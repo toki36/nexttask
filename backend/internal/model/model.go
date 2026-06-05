@@ -19,7 +19,7 @@ type TaskGroup struct {
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 	Tasks     []Task     `json:"-" gorm:"foreignKey:GroupID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
-	Schedules []Schedule `json:"-" gorm:"foreignKey:GroupID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Schedules []Schedule `json:"-" gorm:"foreignKey:GroupID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }
 
 type Schedule struct {
@@ -27,8 +27,8 @@ type Schedule struct {
 	UserID string `json:"user_id" gorm:"type:uuid;not null;index"`
 	User   User   `json:"-" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
-	GroupID string    `json:"group_id" gorm:"type:uuid;not null;index"`
-	Group   TaskGroup `json:"group,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	GroupID *string    `json:"group_id" gorm:"type:uuid;index"`
+	Group   *TaskGroup `json:"group,omitempty" gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 
 	Title        string    `json:"title" gorm:"not null"`
 	LocationName *string   `json:"location_name,omitempty" gorm:"size:255"`
