@@ -2,11 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AuthView } from "@/components/auth-view";
-import { Modal, Stat, StatusMessage } from "@/components/common";
+import { Modal, StatusMessage } from "@/components/common";
 import { GroupsSidebar } from "@/components/groups-sidebar";
 import { ScheduleCalendar, ScheduleForm, ScheduleList } from "@/components/schedules";
 import { TaskForm, TaskList } from "@/components/tasks";
-import { apiBase, apiRequest, errorMessage, tokenKey, userKey } from "@/lib/api";
+import { apiBase, apiRequest, errorMessage, isUnauthorizedError, tokenKey, userKey } from "@/lib/api";
 import { datePart, isAllDayRange, isValidDateRange, toDateTimeLocal, toRFC3339 } from "@/lib/date";
 import { initialScheduleForm, initialTaskForm } from "@/lib/forms";
 import { savedToken, savedUser } from "@/lib/storage";
@@ -66,8 +66,6 @@ export function Dashboard() {
     }, {});
   }, [schedules]);
 
-  const openTaskCount = tasks.filter((task) => task.status === "open").length;
-
   useEffect(() => {
     const id = window.setTimeout(() => {
       setToken(savedToken());
@@ -95,6 +93,19 @@ export function Dashboard() {
       }
       setStatus("Synced");
     } catch (err) {
+      if (isUnauthorizedError(err)) {
+        window.localStorage.removeItem(tokenKey);
+        window.localStorage.removeItem(userKey);
+        setToken("");
+        setUser(null);
+        setGroups([]);
+        setSchedules([]);
+        setTasks([]);
+        setSelectedGroupID("all");
+        setStatus("");
+        setError("Session expired. Please log in again.");
+        return;
+      }
       setError(errorMessage(err));
     } finally {
       setLoading(false);
@@ -553,13 +564,6 @@ export function Dashboard() {
       </header>
 
       <div className="page">
-        <div className="summary-row">
-          <Stat label="Group" value={groups.length} />
-          <Stat label="Schedules" value={schedules.length} />
-          <Stat label="Open tasks" value={openTaskCount} />
-          <Stat label="Visible" value={visibleTasks.length + selectedDateSchedules.length} />
-        </div>
-
         <div className="dashboard">
           <GroupsSidebar
             editingGroupID={editingGroupID}

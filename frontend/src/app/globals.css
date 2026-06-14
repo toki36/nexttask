@@ -719,32 +719,6 @@ textarea:focus {
   color: var(--danger);
 }
 
-.summary-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.stat {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  padding: 12px;
-}
-
-.stat-value {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.stat-label {
-  margin: 3px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
 @media (max-width: 1040px) {
   .auth-page,
   .dashboard,
@@ -805,8 +779,7 @@ textarea:focus {
   }
 
   .form-grid,
-  .form-grid.three,
-  .summary-row {
+  .form-grid.three {
     grid-template-columns: 1fr;
   }
 
