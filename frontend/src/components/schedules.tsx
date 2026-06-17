@@ -1,5 +1,5 @@
-import type { FormEvent } from "react";
-import type { Schedule, ScheduleFormState, TaskGroup } from "@/types";
+import type { CSSProperties, FormEvent } from "react";
+import type { Schedule, ScheduleFormState, Task, TaskGroup } from "@/types";
 import {
   dateKey,
   datePart,
@@ -34,21 +34,41 @@ type ScheduleFormProps = {
 type ScheduleCalendarProps = {
   month: Date;
   schedules: Schedule[];
+  tasks: Task[];
   selectedDate: string;
   onMonthChange: (month: Date) => void;
   onSelectDate: (date: string) => void;
+};
+
+type CalendarCell = {
+  date: Date;
+  key: string;
+  inMonth: boolean;
+};
+
+type CalendarBar = {
+  id: string;
+  title: string;
+  type: "schedule" | "task";
+  allDay: boolean;
+  columnStart: number;
+  columnEnd: number;
+  lane: number;
 };
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function ScheduleCalendar({
   month,
-  schedules,
+  schedules = [],
+  tasks = [],
   selectedDate,
   onMonthChange,
   onSelectDate,
 }: ScheduleCalendarProps) {
   const cells = calendarCells(month);
+  const weeks = chunkWeeks(cells);
+  const todayKey = dateKey(new Date());
 
   return (
     <div className="calendar">
@@ -67,37 +87,64 @@ export function ScheduleCalendar({
         ))}
       </div>
       <div className="calendar-grid">
-        {cells.map((cell) => {
-          const daySchedules = schedulesForDate(schedules, cell.key);
-          const active = selectedDate === cell.key;
+        {weeks.map((week) => {
+          const bars = calendarBarsForWeek(schedules, tasks, week);
+          const laneCount = Math.max(1, ...bars.map((bar) => bar.lane + 1));
 
           return (
-            <button
-              className={[
-                "calendar-day",
-                cell.inMonth ? "" : "muted",
-                active ? "active" : "",
-                daySchedules.length > 0 ? "has-items" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              key={cell.key}
-              onClick={() => onSelectDate(active ? "" : cell.key)}
-              type="button"
+            <div
+              className="calendar-week"
+              key={week[0].key}
+              style={{ "--calendar-lanes": laneCount } as CSSProperties}
             >
-              <span className="calendar-date-number">{cell.date.getDate()}</span>
-              <span className="calendar-items">
-                {daySchedules.slice(0, 2).map((schedule) => (
-                  <span className="calendar-item" key={schedule.id}>
-                    {isAllDayRange(toLocalDateTime(schedule.start_time), toLocalDateTime(schedule.end_time))
-                      ? "All day "
-                      : ""}
-                    {schedule.title}
-                  </span>
+              <div className="calendar-week-days">
+                {week.map((cell) => {
+                  const active = selectedDate === cell.key;
+                  const today = todayKey === cell.key;
+                  const hasItems = calendarItemsForDate(schedules, tasks, cell.key).length > 0;
+
+                  return (
+                    <button
+                      className={[
+                        "calendar-day",
+                        cell.inMonth ? "" : "muted",
+                        active ? "active" : "",
+                        today ? "today" : "",
+                        hasItems ? "has-items" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      key={cell.key}
+                      onClick={() => onSelectDate(active ? "" : cell.key)}
+                      type="button"
+                    >
+                      <span className="calendar-date-number">{cell.date.getDate()}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="calendar-bars" aria-hidden="true">
+                {bars.map((bar) => (
+                  <div
+                    className={[
+                      "calendar-bar",
+                      bar.type === "task" ? "task" : "",
+                      bar.allDay ? "all-day" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    key={`${bar.type}-${bar.id}-${bar.columnStart}-${bar.columnEnd}`}
+                    style={{
+                      gridColumn: `${bar.columnStart} / ${bar.columnEnd}`,
+                      gridRow: bar.lane + 1,
+                    }}
+                    title={bar.title}
+                  >
+                    {bar.title}
+                  </div>
                 ))}
-                {daySchedules.length > 2 ? <span className="calendar-more">+{daySchedules.length - 2}</span> : null}
-              </span>
-            </button>
+              </div>
+            </div>
           );
         })}
       </div>
@@ -117,9 +164,9 @@ export function ScheduleList({ groups, schedules, onDelete, onEdit, loading }: S
           <div>
             <h3 className="item-title">{schedule.title}</h3>
             <div className="item-meta">
-              <span className="pill strong">{schedule.group_id ? groupName(groups, schedule.group_id) : "No group"}</span>
-              <span className="pill">{formatRange(schedule.start_time, schedule.end_time)}</span>
-              {schedule.location_name ? <span className="pill">{schedule.location_name}</span> : null}
+              <span>{schedule.group_id ? groupName(groups, schedule.group_id) : "No group"}</span>
+              <span>{formatRange(schedule.start_time, schedule.end_time)}</span>
+              {schedule.location_name ? <span>{schedule.location_name}</span> : null}
             </div>
           </div>
           <div className="actions">
@@ -150,7 +197,7 @@ export function ScheduleForm({
       <div className="section-header" style={{ padding: 0, borderBottom: 0 }}>
         <div>
           <h3>{editing ? "Edit schedule" : "Create schedule"}</h3>
-          <p>Attach a schedule to a group</p>
+          <p>Create a calendar block with an optional group</p>
         </div>
       </div>
       <div className="field">
@@ -265,7 +312,7 @@ export function ScheduleForm({
             Cancel
           </button>
         ) : null}
-        <button className="btn primary" disabled={loading || groups.length === 0} type="submit">
+        <button className="btn primary" disabled={loading} type="submit">
           {editing ? "Update" : "Create"}
         </button>
       </div>
@@ -277,7 +324,7 @@ function groupName(groups: TaskGroup[], id: string) {
   return groups.find((group) => group.id === id)?.name ?? "Ungrouped";
 }
 
-function calendarCells(month: Date) {
+function calendarCells(month: Date): CalendarCell[] {
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   const start = new Date(first);
   start.setDate(first.getDate() - first.getDay());
@@ -293,12 +340,109 @@ function calendarCells(month: Date) {
   });
 }
 
+function chunkWeeks(cells: CalendarCell[]) {
+  return Array.from({ length: 6 }, (_, index) => cells.slice(index * 7, index * 7 + 7));
+}
+
 function addMonths(month: Date, amount: number) {
   return new Date(month.getFullYear(), month.getMonth() + amount, 1);
 }
 
-function schedulesForDate(schedules: Schedule[], targetDate: string) {
-  return schedules.filter((schedule) => datePart(toLocalDateTime(schedule.start_time)) === targetDate);
+function calendarItemsForDate(schedules: Schedule[], tasks: Task[], targetDate: string) {
+  const target = new Date(`${targetDate}T00:00`);
+  const matchingSchedules = schedules.filter((schedule) => {
+    return scheduleDateStart(schedule) <= target && target <= scheduleDateEnd(schedule);
+  });
+  const matchingTasks = tasks.filter((task) => {
+    const range = taskDateRange(task);
+    return range.start <= target && target <= range.end;
+  });
+  return [...matchingSchedules, ...matchingTasks];
+}
+
+function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: CalendarCell[]) {
+  const weekStart = startOfDate(week[0].date);
+  const weekEnd = startOfDate(week[6].date);
+  const calendarItems = [
+    ...schedules.map((schedule) => ({
+      id: schedule.id,
+      title: schedule.title,
+      type: "schedule" as const,
+      allDay: isAllDayRange(toLocalDateTime(schedule.start_time), toLocalDateTime(schedule.end_time)),
+      start: scheduleDateStart(schedule),
+      end: scheduleDateEnd(schedule),
+    })),
+    ...tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      type: "task" as const,
+      allDay: false,
+      ...taskDateRange(task),
+    })),
+  ];
+
+  const bars = calendarItems
+    .map((item) => {
+      if (item.end < weekStart || item.start > weekEnd) return null;
+
+      const visibleStart = item.start < weekStart ? weekStart : item.start;
+      const visibleEnd = item.end > weekEnd ? weekEnd : item.end;
+      return {
+        id: item.id,
+        title: item.title,
+        type: item.type,
+        allDay: item.allDay,
+        columnStart: daysBetween(weekStart, visibleStart) + 1,
+        columnEnd: daysBetween(weekStart, visibleEnd) + 2,
+        lane: 0,
+      };
+    })
+    .filter((bar): bar is CalendarBar => bar !== null)
+    .sort((a, b) => {
+      if (a.columnStart !== b.columnStart) return a.columnStart - b.columnStart;
+      return b.columnEnd - b.columnStart - (a.columnEnd - a.columnStart);
+    });
+
+  const laneEnds: number[] = [];
+  for (const bar of bars) {
+    const lane = laneEnds.findIndex((end) => end <= bar.columnStart);
+    if (lane === -1) {
+      bar.lane = laneEnds.length;
+      laneEnds.push(bar.columnEnd);
+    } else {
+      bar.lane = lane;
+      laneEnds[lane] = bar.columnEnd;
+    }
+  }
+
+  return bars;
+}
+
+function scheduleDateStart(schedule: Schedule) {
+  return startOfDate(new Date(toLocalDateTime(schedule.start_time)));
+}
+
+function scheduleDateEnd(schedule: Schedule) {
+  const localEnd = toLocalDateTime(schedule.end_time);
+  const end = startOfDate(new Date(localEnd));
+  if (timePart(localEnd) === "00:00" && end.getTime() > scheduleDateStart(schedule).getTime()) {
+    end.setDate(end.getDate() - 1);
+  }
+  return end;
+}
+
+function taskDateRange(task: Task) {
+  const today = startOfDate(new Date());
+  const deadline = startOfDate(new Date(toLocalDateTime(task.deadline)));
+  return deadline < today ? { start: deadline, end: today } : { start: today, end: deadline };
+}
+
+function startOfDate(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function daysBetween(start: Date, end: Date) {
+  return Math.round((startOfDate(end).getTime() - startOfDate(start).getTime()) / 86_400_000);
 }
 
 function toLocalDateTime(value: string) {

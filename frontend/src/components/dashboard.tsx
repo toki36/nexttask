@@ -7,12 +7,12 @@ import { GroupsSidebar } from "@/components/groups-sidebar";
 import { ScheduleCalendar, ScheduleForm, ScheduleList } from "@/components/schedules";
 import { TaskForm, TaskList } from "@/components/tasks";
 import { apiBase, apiRequest, errorMessage, isUnauthorizedError, tokenKey, userKey } from "@/lib/api";
-import { datePart, isAllDayRange, isValidDateRange, toDateTimeLocal, toRFC3339 } from "@/lib/date";
+import { datePart, formatDateTime, isAllDayRange, isValidDateRange, toDateTimeLocal, toRFC3339 } from "@/lib/date";
 import { initialScheduleForm, initialTaskForm } from "@/lib/forms";
 import { savedToken, savedUser } from "@/lib/storage";
 import type { AuthMode, AuthResponse, Schedule, Task, TaskGroup, User } from "@/types";
 
-type ActiveModal = "group" | "task" | "schedule" | null;
+type ActiveModal = "group" | "task" | "task-detail" | "schedule" | null;
 
 export function Dashboard() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -31,9 +31,11 @@ export function Dashboard() {
   const [taskForm, setTaskForm] = useState(initialTaskForm);
   const [editingScheduleID, setEditingScheduleID] = useState<string | null>(null);
   const [editingTaskID, setEditingTaskID] = useState<string | null>(null);
+  const [selectedTaskID, setSelectedTaskID] = useState<string | null>(null);
   const [editingGroupID, setEditingGroupID] = useState<string | null>(null);
   const [groupEditName, setGroupEditName] = useState("");
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -57,6 +59,11 @@ export function Dashboard() {
     if (selectedGroupID === "all") return tasks;
     return tasks.filter((task) => task.group_id === selectedGroupID);
   }, [tasks, selectedGroupID]);
+
+  const selectedTask = useMemo(
+    () => tasks.find((task) => task.id === selectedTaskID) ?? null,
+    [selectedTaskID, tasks],
+  );
 
   const groupScheduleCounts = useMemo(() => {
     return schedules.reduce<Record<string, number>>((counts, schedule) => {
@@ -148,6 +155,7 @@ export function Dashboard() {
   function logout() {
     window.localStorage.removeItem(tokenKey);
     window.localStorage.removeItem(userKey);
+    setSettingsOpen(false);
     setToken("");
     setUser(null);
     setGroups([]);
@@ -369,6 +377,7 @@ export function Dashboard() {
       await apiRequest<void>(`/tasks/${taskID}`, { method: "DELETE" }, token);
       setTasks((current) => current.filter((task) => task.id !== taskID));
       if (editingTaskID === taskID) resetTaskForm();
+      if (selectedTaskID === taskID) closeTaskDetail();
       setStatus("Task deleted");
     } catch (err) {
       setError(errorMessage(err));
@@ -379,6 +388,7 @@ export function Dashboard() {
 
   function editTask(task: Task) {
     setEditingTaskID(task.id);
+    setSelectedTaskID(null);
     setActiveModal("task");
     setTaskForm({
       title: task.title,
@@ -401,6 +411,7 @@ export function Dashboard() {
 
   function openTaskForm() {
     setEditingTaskID(null);
+    setSelectedTaskID(null);
     setTaskForm({
       ...initialTaskForm,
       group_id: selectedGroupID === "all" ? "" : selectedGroupID,
@@ -413,7 +424,18 @@ export function Dashboard() {
     setActiveModal(null);
   }
 
+  function openTaskDetail(task: Task) {
+    setSelectedTaskID(task.id);
+    setActiveModal("task-detail");
+  }
+
+  function closeTaskDetail() {
+    setSelectedTaskID(null);
+    setActiveModal(null);
+  }
+
   async function downloadICS() {
+    setSettingsOpen(false);
     setLoading(true);
     setError("");
     try {
@@ -492,8 +514,14 @@ export function Dashboard() {
     setTaskForm((current) => ({ ...current, group_id: groupID === "all" ? "" : groupID }));
     setEditingTaskID(null);
     setEditingScheduleID(null);
+    setSelectedTaskID(null);
     setActiveModal(null);
     setSelectedScheduleDate("");
+  }
+
+  function refreshWorkspace() {
+    setSettingsOpen(false);
+    void loadWorkspace();
   }
 
   if (!authReady) {
@@ -550,15 +578,36 @@ export function Dashboard() {
           </div>
           <div className="user-row">
             <span className="user-email">{user.email}</span>
-            <button className="btn ghost small" onClick={() => void loadWorkspace()} disabled={loading} type="button">
-              Update
-            </button>
-            <button className="btn ghost small" onClick={downloadICS} disabled={loading} type="button">
-              ICS
-            </button>
-            <button className="btn small" onClick={logout} type="button">
-              Log out
-            </button>
+            <div className="settings-menu">
+              <button
+                aria-expanded={settingsOpen}
+                aria-label="Open settings menu"
+                className="icon-button"
+                onClick={() => setSettingsOpen((current) => !current)}
+                type="button"
+              >
+                <span />
+                <span />
+                <span />
+              </button>
+              {settingsOpen ? (
+                <div className="settings-panel">
+                  <div className="settings-panel-header">
+                    <span>Settings</span>
+                    <small>{user.email}</small>
+                  </div>
+                  <button disabled={loading} onClick={refreshWorkspace} type="button">
+                    Update workspace
+                  </button>
+                  <button disabled={loading} onClick={downloadICS} type="button">
+                    Export ICS
+                  </button>
+                  <button className="danger-text" onClick={logout} type="button">
+                    Log out
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </header>
@@ -605,12 +654,8 @@ export function Dashboard() {
                 </div>
                 <div className="list-pane">
                   <TaskList
-                    groups={groups}
                     tasks={visibleTasks}
-                    onDelete={deleteTask}
-                    onEdit={editTask}
-                    onStatus={updateTaskStatus}
-                    loading={loading}
+                    onSelect={openTaskDetail}
                   />
                 </div>
               </div>
@@ -634,6 +679,7 @@ export function Dashboard() {
                   <ScheduleCalendar
                     month={calendarMonth}
                     schedules={visibleSchedules}
+                    tasks={visibleTasks}
                     selectedDate={selectedScheduleDate}
                     onMonthChange={setCalendarMonth}
                     onSelectDate={setSelectedScheduleDate}
@@ -681,6 +727,72 @@ export function Dashboard() {
               </button>
             </div>
           </form>
+        </Modal>
+      ) : null}
+      {activeModal === "task-detail" && selectedTask ? (
+        <Modal title={selectedTask.title} onClose={closeTaskDetail}>
+          <div className="stack">
+            <div className="detail-grid">
+              <div>
+                <span className="detail-label">Status</span>
+                <strong>{selectedTask.status === "completed" ? "Done" : "Open"}</strong>
+              </div>
+              <div>
+                <span className="detail-label">Due</span>
+                <strong>{formatDateTime(selectedTask.deadline)}</strong>
+              </div>
+              <div>
+                <span className="detail-label">Group</span>
+                <strong>
+                  {selectedTask.group_id
+                    ? groups.find((group) => group.id === selectedTask.group_id)?.name ?? "Ungrouped"
+                    : "No group"}
+                </strong>
+              </div>
+              <div>
+                <span className="detail-label">Estimate</span>
+                <strong>{selectedTask.estimated_minutes}min</strong>
+              </div>
+              <div>
+                <span className="detail-label">Weight</span>
+                <strong>{selectedTask.weight}</strong>
+              </div>
+              <div>
+                <span className="detail-label">Priority</span>
+                <strong>{selectedTask.priority_score.toFixed(1)}</strong>
+              </div>
+            </div>
+            {selectedTask.location_name ? (
+              <div className="detail-block">
+                <span className="detail-label">Location</span>
+                <p>{selectedTask.location_name}</p>
+              </div>
+            ) : null}
+            {selectedTask.description ? (
+              <div className="detail-block">
+                <span className="detail-label">Description</span>
+                <p>{selectedTask.description}</p>
+              </div>
+            ) : null}
+            <div className="actions">
+              <button className="btn ghost" disabled={loading} onClick={() => editTask(selectedTask)} type="button">
+                Edit
+              </button>
+              <button
+                className="btn ghost"
+                disabled={loading}
+                onClick={() =>
+                  void updateTaskStatus(selectedTask, selectedTask.status === "completed" ? "open" : "completed")
+                }
+                type="button"
+              >
+                {selectedTask.status === "completed" ? "Reopen" : "Done"}
+              </button>
+              <button className="btn danger" disabled={loading} onClick={() => void deleteTask(selectedTask.id)} type="button">
+                Delete
+              </button>
+            </div>
+          </div>
         </Modal>
       ) : null}
       {activeModal === "task" ? (

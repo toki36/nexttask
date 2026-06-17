@@ -152,6 +152,79 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.settings-menu {
+  position: relative;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px;
+}
+
+.icon-button span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 220px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px rgba(23, 35, 29, 0.16);
+}
+
+.settings-panel-header {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-panel-header span {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.settings-panel-header small {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-panel button {
+  width: 100%;
+  background: transparent;
+  color: var(--text);
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.settings-panel button:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.settings-panel button.danger-text {
+  color: var(--danger);
+}
+
 .page {
   max-width: 1440px;
   margin: 0 auto;
@@ -489,6 +562,34 @@ textarea:focus {
   padding: 16px;
 }
 
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-grid > div,
+.detail-block {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 12px;
+}
+
+.detail-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.detail-block p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
 .item-list {
   display: grid;
   gap: 10px;
@@ -505,6 +606,17 @@ textarea:focus {
   padding: 13px;
 }
 
+.task-item {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  text-align: left;
+}
+
+.task-item:hover {
+  border-color: var(--border-strong);
+  background: #fbfdf9;
+}
+
 .item.done {
   background: #f4f6f2;
   color: var(--text-muted);
@@ -519,8 +631,18 @@ textarea:focus {
 .item-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 6px 12px;
   margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.item-meta span {
+  line-height: 1.5;
+}
+
+.warn-text {
+  color: var(--warning);
 }
 
 .pill {
@@ -619,8 +741,7 @@ textarea:focus {
   font-size: 15px;
 }
 
-.calendar-weekdays,
-.calendar-grid {
+.calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
@@ -637,17 +758,34 @@ textarea:focus {
 }
 
 .calendar-grid {
+  display: grid;
   border-top: 1px solid var(--border);
   border-left: 1px solid var(--border);
 }
 
-.calendar-day {
-  display: grid;
-  min-height: 78px;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 4px;
-  border-right: 1px solid var(--border);
+.calendar-week {
+  position: relative;
+  min-height: calc(66px + var(--calendar-lanes, 1) * 24px);
   border-bottom: 1px solid var(--border);
+}
+
+.calendar-week-days,
+.calendar-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-week-days {
+  position: absolute;
+  inset: 0;
+}
+
+.calendar-day {
+  display: flex;
+  height: 100%;
+  align-items: flex-start;
+  justify-content: flex-start;
+  border-right: 1px solid var(--border);
   border-radius: 0;
   background: var(--surface);
   color: var(--text);
@@ -665,8 +803,27 @@ textarea:focus {
   outline-offset: -2px;
 }
 
+.calendar-day.today {
+  background: #e8f5ef;
+  color: var(--accent-strong);
+}
+
+.calendar-day.today .calendar-date-number {
+  display: inline-grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+}
+
 .calendar-day.has-items {
   background: #fbfdf9;
+}
+
+.calendar-day.today.has-items {
+  background: #e1f2ea;
 }
 
 .calendar-date-number {
@@ -674,28 +831,46 @@ textarea:focus {
   font-weight: 700;
 }
 
-.calendar-items {
-  display: grid;
-  align-content: start;
-  gap: 3px;
-  min-width: 0;
+.calendar-bars {
+  position: relative;
+  z-index: 1;
+  grid-auto-rows: 22px;
+  gap: 4px 0;
+  padding: 30px 6px 8px;
+  pointer-events: none;
 }
 
-.calendar-item,
-.calendar-more {
+.calendar-bar {
   overflow: hidden;
-  border-radius: 4px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  padding: 2px 4px;
+  align-self: center;
+  min-width: 0;
+  height: 20px;
+  margin: 0 2px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 2px 8px;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 16px;
 }
 
-.calendar-more {
-  background: var(--surface-muted);
-  color: var(--text-muted);
+.calendar-bar.all-day {
+  background: var(--accent-strong);
+}
+
+.calendar-bar.task {
+  background: #4f46e5;
+}
+
+@media (max-width: 720px) {
+  .calendar-bar {
+    padding: 1px 5px;
+    font-size: 10px;
+  }
 }
 
 .calendar-filter-row {
@@ -779,7 +954,8 @@ textarea:focus {
   }
 
   .form-grid,
-  .form-grid.three {
+  .form-grid.three,
+  .detail-grid {
     grid-template-columns: 1fr;
   }
 
@@ -803,5 +979,13 @@ textarea:focus {
 
   .actions .btn {
     flex: 1;
+  }
+
+  .settings-menu {
+    justify-self: end;
+  }
+
+  .settings-panel {
+    width: min(280px, calc(100vw - 28px));
   }
 }

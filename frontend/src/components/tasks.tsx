@@ -1,14 +1,10 @@
 import type { FormEvent } from "react";
 import type { Task, TaskFormState, TaskGroup } from "@/types";
-import { datePart, formatDateTime, timePart, withDatePart, withTimePart } from "@/lib/date";
+import { datePart, timePart, withDatePart, withTimePart } from "@/lib/date";
 
 type TaskListProps = {
-  groups: TaskGroup[];
   tasks: Task[];
-  onDelete: (id: string) => Promise<void>;
-  onEdit: (task: Task) => void;
-  onStatus: (task: Task, status: Task["status"]) => Promise<void>;
-  loading: boolean;
+  onSelect: (task: Task) => void;
 };
 
 type TaskFormProps = {
@@ -21,7 +17,7 @@ type TaskFormProps = {
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
 
-export function TaskList({ groups, tasks, onDelete, onEdit, onStatus, loading }: TaskListProps) {
+export function TaskList({ tasks, onSelect }: TaskListProps) {
   if (tasks.length === 0) {
     return <div className="empty">No tasks yet</div>;
   }
@@ -29,39 +25,17 @@ export function TaskList({ groups, tasks, onDelete, onEdit, onStatus, loading }:
   return (
     <div className="item-list">
       {tasks.map((task) => (
-        <article className={task.status === "completed" ? "item done" : "item"} key={task.id}>
+        <button
+          className={task.status === "completed" ? "item task-item done" : "item task-item"}
+          key={task.id}
+          onClick={() => onSelect(task)}
+          type="button"
+        >
           <div>
             <h3 className="item-title">{task.title}</h3>
-            <div className="item-meta">
-              <span className="pill strong">{task.group_id ? groupName(groups, task.group_id) : "No group"}</span>
-              <span className={task.status === "completed" ? "pill" : "pill warn"}>
-                {task.status === "completed" ? "Done" : "Open"}
-              </span>
-              <span className="pill">{formatDateTime(task.deadline)}</span>
-              <span className="pill">{task.estimated_minutes}min</span>
-              <span className="pill">Weight {task.weight}</span>
-              <span className="pill">Priority {task.priority_score.toFixed(1)}</span>
-              {task.location_name ? <span className="pill">{task.location_name}</span> : null}
-            </div>
             {task.description ? <p className="status-line">{task.description}</p> : null}
           </div>
-          <div className="actions">
-            <button className="btn ghost small" disabled={loading} onClick={() => onEdit(task)} type="button">
-              Edit
-            </button>
-            <button
-              className="btn ghost small"
-              disabled={loading}
-              onClick={() => onStatus(task, task.status === "completed" ? "open" : "completed")}
-              type="button"
-            >
-              {task.status === "completed" ? "Reopen" : "Done"}
-            </button>
-            <button className="btn danger small" disabled={loading} onClick={() => onDelete(task.id)} type="button">
-              Delete
-            </button>
-          </div>
-        </article>
+        </button>
       ))}
     </div>
   );
@@ -184,8 +158,4 @@ export function TaskForm({
       </div>
     </form>
   );
-}
-
-function groupName(groups: TaskGroup[], id: string) {
-  return groups.find((group) => group.id === id)?.name ?? "Ungrouped";
 }
