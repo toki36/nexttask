@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     title VARCHAR NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     location_name TEXT,
+    start_time TIMESTAMPTZ,
     deadline TIMESTAMPTZ NOT NULL,
     estimated_minutes INTEGER NOT NULL,
     weight INTEGER NOT NULL DEFAULT 1,
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS schedules (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks(deadline);
+CREATE INDEX IF NOT EXISTS idx_tasks_start_time ON tasks(start_time);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_task_groups_user_id ON task_groups(user_id);

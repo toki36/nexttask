@@ -20,6 +20,7 @@ type createTaskRequest struct {
 	Title            string  `json:"title"`
 	Description      string  `json:"description"`
 	LocationName     *string `json:"location_name"`
+	StartTime        *string `json:"start_time"`
 	Deadline         string  `json:"deadline"`
 	EstimatedMinutes int     `json:"estimated_minutes"`
 	Weight           int     `json:"weight"`
@@ -30,11 +31,13 @@ type updateTaskRequest struct {
 	Title            *string `json:"title"`
 	Description      *string `json:"description"`
 	LocationName     *string `json:"location_name"`
+	StartTime        *string `json:"start_time"`
 	Deadline         *string `json:"deadline"`
 	EstimatedMinutes *int    `json:"estimated_minutes"`
 	Weight           *int    `json:"weight"`
 	Status           *string `json:"status"`
 	locationNameSet  bool
+	startTimeSet     bool
 }
 
 func (h *Handler) ListTasks(c echo.Context) error {
@@ -139,6 +142,9 @@ func bindCreateTaskRequest(c echo.Context) (createTaskRequest, error) {
 		return req, err
 	}
 	req.Title = strings.TrimSpace(req.Title)
+	if err := normalizeOptionalTaskTime(c, &req.StartTime, "start_time"); err != nil {
+		return req, err
+	}
 	req.Deadline = strings.TrimSpace(req.Deadline)
 	if req.Title == "" {
 		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "title is required")
@@ -175,6 +181,9 @@ func bindUpdateTaskRequest(c echo.Context) (updateTaskRequest, error) {
 			req.LocationName = &empty
 		}
 	}
+	if _, ok := fields["start_time"]; ok {
+		req.startTimeSet = true
+	}
 	if err := normalizeGroupID(c, &req.GroupID); err != nil {
 		return req, err
 	}
@@ -187,6 +196,9 @@ func bindUpdateTaskRequest(c echo.Context) (updateTaskRequest, error) {
 			return req, errorResponse(c, http.StatusBadRequest, "validation_error", "title must not be empty")
 		}
 		req.Title = &title
+	}
+	if err := normalizeOptionalTaskTime(c, &req.StartTime, "start_time"); err != nil {
+		return req, err
 	}
 	if req.Deadline != nil {
 		deadline := strings.TrimSpace(*req.Deadline)
@@ -220,6 +232,13 @@ func (h *Handler) taskFromCreateRequest(c echo.Context, userID string, req creat
 	if err != nil {
 		return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
 	}
+	startTime, err := parseOptionalTaskTime(c, req.StartTime, "start_time")
+	if err != nil {
+		return task, err
+	}
+	if startTime != nil && !deadline.After(*startTime) {
+		return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be after start_time")
+	}
 	if err := h.ensureTaskGroupExists(c, userID, req.GroupID); err != nil {
 		return task, err
 	}
@@ -228,6 +247,7 @@ func (h *Handler) taskFromCreateRequest(c echo.Context, userID string, req creat
 	task.Title = req.Title
 	task.Description = req.Description
 	task.LocationName = req.LocationName
+	task.StartTime = startTime
 	task.Deadline = deadline
 	task.EstimatedMinutes = req.EstimatedMinutes
 	task.Weight = req.Weight
@@ -251,12 +271,22 @@ func (h *Handler) applyTaskUpdateRequest(c echo.Context, userID string, req upda
 	if req.locationNameSet {
 		task.LocationName = req.LocationName
 	}
+	if req.startTimeSet {
+		startTime, err := parseOptionalTaskTime(c, req.StartTime, "start_time")
+		if err != nil {
+			return task, err
+		}
+		task.StartTime = startTime
+	}
 	if req.Deadline != nil {
 		deadline, err := time.Parse(time.RFC3339, *req.Deadline)
 		if err != nil {
 			return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be RFC3339")
 		}
 		task.Deadline = deadline
+	}
+	if task.StartTime != nil && !task.Deadline.After(*task.StartTime) {
+		return task, errorResponse(c, http.StatusBadRequest, "validation_error", "deadline must be after start_time")
 	}
 	if req.EstimatedMinutes != nil {
 		task.EstimatedMinutes = *req.EstimatedMinutes
@@ -332,6 +362,32 @@ func normalizeLocationName(c echo.Context, locationName **string) error {
 	}
 	*locationName = &value
 	return nil
+}
+
+func normalizeOptionalTaskTime(c echo.Context, value **string, field string) error {
+	if *value == nil {
+		return nil
+	}
+	normalized := strings.TrimSpace(**value)
+	if normalized == "" {
+		return errorResponse(c, http.StatusBadRequest, "validation_error", field+" must not be empty")
+	}
+	if _, err := time.Parse(time.RFC3339, normalized); err != nil {
+		return errorResponse(c, http.StatusBadRequest, "validation_error", field+" must be RFC3339")
+	}
+	*value = &normalized
+	return nil
+}
+
+func parseOptionalTaskTime(c echo.Context, value *string, field string) (*time.Time, error) {
+	if value == nil {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, *value)
+	if err != nil {
+		return nil, errorResponse(c, http.StatusBadRequest, "validation_error", field+" must be RFC3339")
+	}
+	return &parsed, nil
 }
 
 func isUUIDLike(value string) bool {

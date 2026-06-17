@@ -120,6 +120,7 @@ func TestCreateTask(t *testing.T) {
 	task := createTestTask(t, e, token, `{
 		"title":"OS report",
 		"description":"initial",
+		"start_time":"2026-06-01T10:00:00+09:00",
 		"deadline":"2026-06-01T23:59:00+09:00",
 		"estimated_minutes":120,
 		"weight":5
@@ -130,6 +131,9 @@ func TestCreateTask(t *testing.T) {
 	}
 	if task["status"] != string(model.TaskStatusOpen) {
 		t.Fatalf("status = %v, want open", task["status"])
+	}
+	if task["start_time"] != "2026-06-01T10:00:00+09:00" {
+		t.Fatalf("start_time = %v, want 2026-06-01T10:00:00+09:00", task["start_time"])
 	}
 }
 
@@ -151,6 +155,26 @@ func TestCreateTaskValidationErrors(t *testing.T) {
 			body: `{
 				"title":"OS report",
 				"deadline":"not-a-date",
+				"estimated_minutes":120,
+				"weight":5
+			}`,
+		},
+		{
+			name: "invalid start time",
+			body: `{
+				"title":"OS report",
+				"start_time":"not-a-date",
+				"deadline":"2026-06-01T23:59:00+09:00",
+				"estimated_minutes":120,
+				"weight":5
+			}`,
+		},
+		{
+			name: "start time after deadline",
+			body: `{
+				"title":"OS report",
+				"start_time":"2026-06-02T10:00:00+09:00",
+				"deadline":"2026-06-01T23:59:00+09:00",
 				"estimated_minutes":120,
 				"weight":5
 			}`,
@@ -208,6 +232,26 @@ func TestPatchTaskUpdatesOnlyProvidedFields(t *testing.T) {
 	}
 	if updated["estimated_minutes"] != float64(120) {
 		t.Fatalf("estimated_minutes = %v, want 120", updated["estimated_minutes"])
+	}
+
+	updateStart := performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{
+		"start_time":"2026-06-01T09:00:00+09:00"
+	}`, token)
+	if updateStart.Code != http.StatusOK {
+		t.Fatalf("update start_time status = %d, want %d, body: %s", updateStart.Code, http.StatusOK, updateStart.Body.String())
+	}
+	updated = decodeResponse(t, updateStart)
+	if updated["start_time"] != "2026-06-01T09:00:00+09:00" {
+		t.Fatalf("start_time = %v, want 2026-06-01T09:00:00+09:00", updated["start_time"])
+	}
+
+	clearStart := performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{"start_time":null}`, token)
+	if clearStart.Code != http.StatusOK {
+		t.Fatalf("clear start_time status = %d, want %d, body: %s", clearStart.Code, http.StatusOK, clearStart.Body.String())
+	}
+	updated = decodeResponse(t, clearStart)
+	if updated["start_time"] != nil {
+		t.Fatalf("start_time = %v, want nil", updated["start_time"])
 	}
 }
 
@@ -290,6 +334,14 @@ func TestPatchTaskValidationAndNotFound(t *testing.T) {
 	rec := performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{"status":"bad"}`, token)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if got := errorCode(t, rec); got != "validation_error" {
+		t.Fatalf("error code = %s, want validation_error", got)
+	}
+
+	rec = performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{"start_time":"2026-06-02T00:00:00+09:00"}`, token)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("start_time after deadline status = %d, want %d, body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 	if got := errorCode(t, rec); got != "validation_error" {
 		t.Fatalf("error code = %s, want validation_error", got)

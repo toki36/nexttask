@@ -55,6 +55,7 @@ type Task struct {
 	Title            string     `json:"title" gorm:"not null"`
 	Description      string     `json:"description"`
 	LocationName     *string    `json:"location_name"`
+	StartTime        *time.Time `json:"start_time,omitempty" gorm:"index"`
 	Deadline         time.Time  `json:"deadline" gorm:"not null;index"`
 	EstimatedMinutes int        `json:"estimated_minutes" gorm:"not null"`
 	Weight           int        `json:"weight" gorm:"not null;default:1"`
