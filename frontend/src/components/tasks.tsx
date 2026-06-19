@@ -101,6 +101,29 @@ export function TaskForm({
       </div>
       <div className="form-grid">
         <div className="field">
+          <label htmlFor="task-start-date">Start date</label>
+          <input
+            id="task-start-date"
+            type="date"
+            value={datePart(form.start_time)}
+            onChange={(event) =>
+              onChange({ ...form, start_time: event.target.value ? withDatePart(form.start_time, event.target.value, "09:00") : "" })
+            }
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="task-start-time">Start time</label>
+          <input
+            id="task-start-time"
+            type="time"
+            value={timePart(form.start_time)}
+            onChange={(event) => onChange({ ...form, start_time: withTimePart(form.start_time, event.target.value) })}
+            disabled={!datePart(form.start_time)}
+          />
+        </div>
+      </div>
+      <div className="form-grid">
+        <div className="field">
           <label htmlFor="task-deadline-date">Due date</label>
           <input
             id="task-deadline-date"

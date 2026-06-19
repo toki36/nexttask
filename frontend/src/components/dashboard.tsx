@@ -326,6 +326,7 @@ export function Dashboard() {
         description: taskForm.description,
         group_id: taskForm.group_id || null,
         location_name: taskForm.location_name,
+        start_time: taskForm.start_time ? toRFC3339(taskForm.start_time) : null,
         deadline: toRFC3339(taskForm.deadline),
         estimated_minutes: Number(taskForm.estimated_minutes),
         weight: Number(taskForm.weight),
@@ -395,6 +396,7 @@ export function Dashboard() {
       description: task.description,
       group_id: task.group_id ?? "",
       location_name: task.location_name ?? "",
+      start_time: task.start_time ? toDateTimeLocal(task.start_time) : "",
       deadline: toDateTimeLocal(task.deadline),
       estimated_minutes: String(task.estimated_minutes),
       weight: String(task.weight),
@@ -736,6 +738,10 @@ export function Dashboard() {
               <div>
                 <span className="detail-label">Status</span>
                 <strong>{selectedTask.status === "completed" ? "Done" : "Open"}</strong>
+              </div>
+              <div>
+                <span className="detail-label">Start</span>
+                <strong>{selectedTask.start_time ? formatDateTime(selectedTask.start_time) : "Not set"}</strong>
               </div>
               <div>
                 <span className="detail-label">Due</span>

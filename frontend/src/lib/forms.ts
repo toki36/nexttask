@@ -14,6 +14,7 @@ export const initialTaskForm: TaskFormState = {
   description: "",
   group_id: "",
   location_name: "",
+  start_time: "",
   deadline: "",
   estimated_minutes: "30",
   weight: "1",

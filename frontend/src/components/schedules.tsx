@@ -433,6 +433,11 @@ function scheduleDateEnd(schedule: Schedule) {
 
 function taskDateRange(task: Task) {
   const today = startOfDate(new Date());
+  if (task.start_time) {
+    const start = startOfDate(new Date(toLocalDateTime(task.start_time)));
+    const end = startOfDate(new Date(toLocalDateTime(task.deadline)));
+    return end < start ? { start: end, end: start } : { start, end };
+  }
   const deadline = startOfDate(new Date(toLocalDateTime(task.deadline)));
   return deadline < today ? { start: deadline, end: today } : { start: today, end: deadline };
 }

@@ -38,6 +38,7 @@ export type Task = {
   title: string;
   description: string;
   location_name?: string | null;
+  start_time?: string | null;
   deadline: string;
   estimated_minutes: number;
   weight: number;
@@ -69,6 +70,7 @@ export type TaskFormState = {
   description: string;
   group_id: string;
   location_name: string;
+  start_time: string;
   deadline: string;
   estimated_minutes: string;
   weight: string;
