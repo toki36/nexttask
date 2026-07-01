@@ -56,8 +56,9 @@ export function Dashboard() {
   }, [selectedScheduleDate, visibleSchedules]);
 
   const visibleTasks = useMemo(() => {
-    if (selectedGroupID === "all") return tasks;
-    return tasks.filter((task) => task.group_id === selectedGroupID);
+    const filteredTasks =
+      selectedGroupID === "all" ? tasks : tasks.filter((task) => task.group_id === selectedGroupID);
+    return [...filteredTasks].sort(compareTasksByPriority);
   }, [tasks, selectedGroupID]);
 
   const selectedTask = useMemo(
@@ -679,12 +680,14 @@ export function Dashboard() {
                 </div>
                 <div className="list-pane">
                   <ScheduleCalendar
+                    groups={groups}
                     month={calendarMonth}
                     schedules={visibleSchedules}
                     tasks={visibleTasks}
                     selectedDate={selectedScheduleDate}
                     onMonthChange={setCalendarMonth}
                     onSelectDate={setSelectedScheduleDate}
+                    onSelectTask={openTaskDetail}
                   />
                   {selectedScheduleDate ? (
                     <div className="calendar-filter-row">
@@ -829,4 +832,9 @@ export function Dashboard() {
       ) : null}
     </main>
   );
+}
+
+function compareTasksByPriority(a: Task, b: Task) {
+  if (b.priority_score !== a.priority_score) return b.priority_score - a.priority_score;
+  return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
 }

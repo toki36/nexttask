@@ -841,8 +841,12 @@ textarea:focus {
 }
 
 .calendar-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
   overflow: hidden;
   align-self: center;
+  appearance: none;
   min-width: 0;
   height: 20px;
   margin: 0 2px;
@@ -855,7 +859,8 @@ textarea:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
-  line-height: 16px;
+  line-height: 1;
+  text-align: left;
 }
 
 .calendar-bar.all-day {
@@ -863,7 +868,13 @@ textarea:focus {
 }
 
 .calendar-bar.task {
-  background: #4f46e5;
+  background: var(--task-color, #4f46e5);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.calendar-bar.task:hover {
+  filter: brightness(0.95);
 }
 
 @media (max-width: 720px) {

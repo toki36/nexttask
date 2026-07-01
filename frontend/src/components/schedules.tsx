@@ -32,12 +32,14 @@ type ScheduleFormProps = {
 };
 
 type ScheduleCalendarProps = {
+  groups: TaskGroup[];
   month: Date;
   schedules: Schedule[];
   tasks: Task[];
   selectedDate: string;
   onMonthChange: (month: Date) => void;
   onSelectDate: (date: string) => void;
+  onSelectTask: (task: Task) => void;
 };
 
 type CalendarCell = {
@@ -51,24 +53,30 @@ type CalendarBar = {
   title: string;
   type: "schedule" | "task";
   allDay: boolean;
+  priorityScore: number;
+  color: string | undefined;
   columnStart: number;
   columnEnd: number;
   lane: number;
 };
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const groupTaskColors = ["#4f46e5", "#0f766e", "#c2410c", "#be123c", "#6d28d9", "#047857", "#b45309"];
 
 export function ScheduleCalendar({
+  groups,
   month,
   schedules = [],
   tasks = [],
   selectedDate,
   onMonthChange,
   onSelectDate,
+  onSelectTask,
 }: ScheduleCalendarProps) {
   const cells = calendarCells(month);
   const weeks = chunkWeeks(cells);
   const todayKey = dateKey(new Date());
+  const taskByID = new Map(tasks.map((task) => [task.id, task]));
 
   return (
     <div className="calendar">
@@ -88,7 +96,7 @@ export function ScheduleCalendar({
       </div>
       <div className="calendar-grid">
         {weeks.map((week) => {
-          const bars = calendarBarsForWeek(schedules, tasks, week);
+          const bars = calendarBarsForWeek(schedules, tasks, groups, week);
           const laneCount = Math.max(1, ...bars.map((bar) => bar.lane + 1));
 
           return (
@@ -123,26 +131,44 @@ export function ScheduleCalendar({
                   );
                 })}
               </div>
-              <div className="calendar-bars" aria-hidden="true">
-                {bars.map((bar) => (
-                  <div
-                    className={[
-                      "calendar-bar",
-                      bar.type === "task" ? "task" : "",
-                      bar.allDay ? "all-day" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    key={`${bar.type}-${bar.id}-${bar.columnStart}-${bar.columnEnd}`}
-                    style={{
-                      gridColumn: `${bar.columnStart} / ${bar.columnEnd}`,
-                      gridRow: bar.lane + 1,
-                    }}
-                    title={bar.title}
-                  >
-                    {bar.title}
-                  </div>
-                ))}
+              <div className="calendar-bars">
+                {bars.map((bar) => {
+                  const style = {
+                    "--task-color": bar.color,
+                    gridColumn: `${bar.columnStart} / ${bar.columnEnd}`,
+                    gridRow: bar.lane + 1,
+                  } as CSSProperties;
+
+                  if (bar.type === "task") {
+                    const task = taskByID.get(bar.id);
+                    return (
+                      <button
+                        className="calendar-bar task"
+                        key={`${bar.type}-${bar.id}-${bar.columnStart}-${bar.columnEnd}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (task) onSelectTask(task);
+                        }}
+                        style={style}
+                        title={bar.title}
+                        type="button"
+                      >
+                        {bar.title}
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <div
+                      className={["calendar-bar", bar.allDay ? "all-day" : ""].filter(Boolean).join(" ")}
+                      key={`${bar.type}-${bar.id}-${bar.columnStart}-${bar.columnEnd}`}
+                      style={style}
+                      title={bar.title}
+                    >
+                      {bar.title}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -360,7 +386,12 @@ function calendarItemsForDate(schedules: Schedule[], tasks: Task[], targetDate: 
   return [...matchingSchedules, ...matchingTasks];
 }
 
-function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: CalendarCell[]) {
+function calendarBarsForWeek(
+  schedules: Schedule[],
+  tasks: Task[],
+  groups: TaskGroup[],
+  week: CalendarCell[],
+): CalendarBar[] {
   const weekStart = startOfDate(week[0].date);
   const weekEnd = startOfDate(week[6].date);
   const calendarItems = [
@@ -369,6 +400,8 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
       title: schedule.title,
       type: "schedule" as const,
       allDay: isAllDayRange(toLocalDateTime(schedule.start_time), toLocalDateTime(schedule.end_time)),
+      priorityScore: Number.NEGATIVE_INFINITY,
+      color: undefined,
       start: scheduleDateStart(schedule),
       end: scheduleDateEnd(schedule),
     })),
@@ -377,6 +410,8 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
       title: task.title,
       type: "task" as const,
       allDay: false,
+      priorityScore: task.priority_score,
+      color: taskGroupColor(groups, task.group_id),
       ...taskDateRange(task),
     })),
   ];
@@ -392,6 +427,8 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
         title: item.title,
         type: item.type,
         allDay: item.allDay,
+        priorityScore: item.priorityScore,
+        color: item.color,
         columnStart: daysBetween(weekStart, visibleStart) + 1,
         columnEnd: daysBetween(weekStart, visibleEnd) + 2,
         lane: 0,
@@ -399,7 +436,11 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
     })
     .filter((bar): bar is CalendarBar => bar !== null)
     .sort((a, b) => {
+      if (a.type === "task" && b.type === "task" && a.priorityScore !== b.priorityScore) {
+        return b.priorityScore - a.priorityScore;
+      }
       if (a.columnStart !== b.columnStart) return a.columnStart - b.columnStart;
+      if (a.type !== b.type) return a.type === "schedule" ? -1 : 1;
       return b.columnEnd - b.columnStart - (a.columnEnd - a.columnStart);
     });
 
@@ -416,6 +457,12 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
   }
 
   return bars;
+}
+
+function taskGroupColor(groups: TaskGroup[], groupID?: string | null) {
+  if (!groupID) return "#64748b";
+  const index = Math.max(0, groups.findIndex((group) => group.id === groupID));
+  return groupTaskColors[index % groupTaskColors.length];
 }
 
 function scheduleDateStart(schedule: Schedule) {
