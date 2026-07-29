@@ -1185,38 +1185,11 @@ textarea:hover {
   gap: 7px;
 }
 
-.field label {
+.field label,
+.field-label {
   color: #53625b;
   font-size: 12px;
   font-weight: 680;
-}
-
-.weight-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.weight-label output {
-  display: grid;
-  min-width: 28px;
-  height: 24px;
-  place-items: center;
-  border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.weight-field input[type="range"] {
-  height: 32px;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  accent-color: var(--accent);
-  box-shadow: none;
 }
 
 .btn {
@@ -1899,6 +1872,30 @@ summary:focus-visible,
   box-shadow: 0 1px 4px rgba(20, 31, 26, 0.11);
 }
 
+.importance-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border-radius: 7px;
+  background: var(--surface-muted);
+}
+
+.importance-options button {
+  min-height: 34px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.importance-options button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(20, 31, 26, 0.11);
+}
+
 .number-with-unit {
   position: relative;
 }
@@ -1916,13 +1913,6 @@ summary:focus-visible,
   font-size: 11px;
   transform: translateY(-50%);
   pointer-events: none;
-}
-
-.range-scale {
-  display: flex;
-  justify-content: space-between;
-  color: #87938e;
-  font-size: 10px;
 }
 
 .switch-field {

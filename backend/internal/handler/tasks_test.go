@@ -123,7 +123,7 @@ func TestCreateTask(t *testing.T) {
 		"start_time":"2026-06-01T10:00:00+09:00",
 		"deadline":"2026-06-01T23:59:00+09:00",
 		"estimated_minutes":120,
-		"weight":5
+		"importance":3
 	}`)
 
 	if task["title"] != "OS report" {
@@ -134,6 +134,24 @@ func TestCreateTask(t *testing.T) {
 	}
 	if task["start_time"] != "2026-06-01T10:00:00+09:00" {
 		t.Fatalf("start_time = %v, want 2026-06-01T10:00:00+09:00", task["start_time"])
+	}
+	if task["importance"] != float64(3) {
+		t.Fatalf("importance = %v, want 3", task["importance"])
+	}
+}
+
+func TestCreateTaskDefaultsImportanceToNormal(t *testing.T) {
+	e, _ := newTaskTestServer(t)
+	token := registerTestUser(t, e, "task-default-importance@example.com")
+
+	task := createTestTask(t, e, token, `{
+		"title":"Default importance",
+		"deadline":"2026-06-01T23:59:00+09:00",
+		"estimated_minutes":30
+	}`)
+
+	if task["importance"] != float64(2) {
+		t.Fatalf("importance = %v, want 2", task["importance"])
 	}
 }
 
@@ -147,7 +165,7 @@ func TestCreateTaskValidationErrors(t *testing.T) {
 			body: `{
 				"deadline":"2026-06-01T23:59:00+09:00",
 				"estimated_minutes":120,
-				"weight":5
+				"importance":3
 			}`,
 		},
 		{
@@ -156,7 +174,7 @@ func TestCreateTaskValidationErrors(t *testing.T) {
 				"title":"OS report",
 				"deadline":"not-a-date",
 				"estimated_minutes":120,
-				"weight":5
+				"importance":3
 			}`,
 		},
 		{
@@ -166,7 +184,7 @@ func TestCreateTaskValidationErrors(t *testing.T) {
 				"start_time":"not-a-date",
 				"deadline":"2026-06-01T23:59:00+09:00",
 				"estimated_minutes":120,
-				"weight":5
+				"importance":3
 			}`,
 		},
 		{
@@ -176,7 +194,7 @@ func TestCreateTaskValidationErrors(t *testing.T) {
 				"start_time":"2026-06-02T10:00:00+09:00",
 				"deadline":"2026-06-01T23:59:00+09:00",
 				"estimated_minutes":120,
-				"weight":5
+				"importance":3
 			}`,
 		},
 		{
@@ -185,8 +203,17 @@ func TestCreateTaskValidationErrors(t *testing.T) {
 				"title":"OS report",
 				"deadline":"2026-06-01T23:59:00+09:00",
 				"estimated_minutes":120,
-				"weight":5,
+				"importance":3,
 				"group_id":"not-a-uuid"
+			}`,
+		},
+		{
+			name: "invalid importance",
+			body: `{
+				"title":"OS report",
+				"deadline":"2026-06-01T23:59:00+09:00",
+				"estimated_minutes":120,
+				"importance":4
 			}`,
 		},
 	}
@@ -214,7 +241,7 @@ func TestPatchTaskUpdatesOnlyProvidedFields(t *testing.T) {
 		"description":"keep me",
 		"deadline":"2026-06-01T23:59:00+09:00",
 		"estimated_minutes":120,
-		"weight":5
+		"importance":3
 	}`)
 	id := task["id"].(string)
 
@@ -265,7 +292,7 @@ func TestTaskLocationName(t *testing.T) {
 		"location_name":"  University Library  ",
 		"deadline":"2026-06-01T23:59:00+09:00",
 		"estimated_minutes":120,
-		"weight":5
+		"importance":3
 	}`)
 	id := task["id"].(string)
 	if task["location_name"] != "University Library" {
@@ -310,7 +337,7 @@ func TestTaskLocationNameValidation(t *testing.T) {
 		"location_name":"`+longLocation+`",
 		"deadline":"2026-06-01T23:59:00+09:00",
 		"estimated_minutes":120,
-		"weight":5
+		"importance":3
 	}`, token)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
@@ -327,7 +354,7 @@ func TestPatchTaskValidationAndNotFound(t *testing.T) {
 		"title":"before",
 		"deadline":"2026-06-01T23:59:00+09:00",
 		"estimated_minutes":120,
-		"weight":5
+		"importance":3
 	}`)
 	id := task["id"].(string)
 
@@ -342,6 +369,14 @@ func TestPatchTaskValidationAndNotFound(t *testing.T) {
 	rec = performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{"start_time":"2026-06-02T00:00:00+09:00"}`, token)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("start_time after deadline status = %d, want %d, body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if got := errorCode(t, rec); got != "validation_error" {
+		t.Fatalf("error code = %s, want validation_error", got)
+	}
+
+	rec = performRequestWithToken(e, http.MethodPatch, "/api/tasks/"+id, `{"importance":0}`, token)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid importance status = %d, want %d, body: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 	if got := errorCode(t, rec); got != "validation_error" {
 		t.Fatalf("error code = %s, want validation_error", got)
@@ -421,7 +456,7 @@ func TestTasksAreScopedByUser(t *testing.T) {
 		"title":"user A task",
 		"deadline":"2026-06-01T23:59:00+09:00",
 		"estimated_minutes":120,
-		"weight":5
+		"importance":3
 	}`)
 	idA := taskA["id"].(string)
 
@@ -463,7 +498,7 @@ func TestTaskGroupIsScopedByUser(t *testing.T) {
 		"title":"bad group",
 		"deadline":"2026-06-01T23:59:00+09:00",
 		"estimated_minutes":60,
-		"weight":3,
+		"importance":2,
 		"group_id":"`+groupID+`"
 	}`, tokenB)
 	if createWithOtherUserGroup.Code != http.StatusBadRequest {

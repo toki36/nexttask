@@ -41,7 +41,7 @@ export type Task = {
   start_time?: string | null;
   deadline: string;
   estimated_minutes: number;
-  weight: number;
+  importance: number;
   priority_score: number;
   status: "open" | "completed";
   completed_at?: string | null;
@@ -74,5 +74,5 @@ export type TaskFormState = {
   start_time: string;
   deadline: string;
   estimated_minutes: string;
-  weight: string;
+  importance: string;
 };

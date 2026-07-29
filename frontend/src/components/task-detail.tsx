@@ -49,6 +49,12 @@ export function TaskDetail({
           <dt>Estimate</dt>
           <dd>{formatDuration(task.estimated_minutes)}</dd>
         </div>
+        {task.importance !== 2 ? (
+          <div>
+            <dt>Importance</dt>
+            <dd>{task.importance === 3 ? "High" : "Low"}</dd>
+          </div>
+        ) : null}
         {groupName ? (
           <div>
             <dt>Group</dt>

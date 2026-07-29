@@ -373,7 +373,7 @@ export function Dashboard() {
         start_time: taskForm.start_time ? toRFC3339(taskForm.start_time) : null,
         deadline: toRFC3339(taskForm.deadline),
         estimated_minutes: Number(taskForm.estimated_minutes),
-        weight: Number(taskForm.weight),
+        importance: Number(taskForm.importance),
       };
       const task = await apiRequest<Task>(
         editingTaskID ? `/tasks/${editingTaskID}` : "/tasks",
@@ -464,7 +464,7 @@ export function Dashboard() {
       start_time: task.start_time ? toDateTimeLocal(task.start_time) : "",
       deadline: toDateTimeLocal(task.deadline),
       estimated_minutes: String(task.estimated_minutes),
-      weight: String(task.weight),
+      importance: String(task.importance),
     });
   }
 

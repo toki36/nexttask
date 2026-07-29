@@ -23,7 +23,7 @@ type createTaskRequest struct {
 	StartTime        *string `json:"start_time"`
 	Deadline         string  `json:"deadline"`
 	EstimatedMinutes int     `json:"estimated_minutes"`
-	Weight           int     `json:"weight"`
+	Importance       *int    `json:"importance"`
 }
 
 type updateTaskRequest struct {
@@ -34,7 +34,7 @@ type updateTaskRequest struct {
 	StartTime        *string `json:"start_time"`
 	Deadline         *string `json:"deadline"`
 	EstimatedMinutes *int    `json:"estimated_minutes"`
-	Weight           *int    `json:"weight"`
+	Importance       *int    `json:"importance"`
 	Status           *string `json:"status"`
 	locationNameSet  bool
 	startTimeSet     bool
@@ -155,8 +155,12 @@ func bindCreateTaskRequest(c echo.Context) (createTaskRequest, error) {
 	if req.EstimatedMinutes <= 0 {
 		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "estimated_minutes must be greater than 0")
 	}
-	if req.Weight <= 0 {
-		req.Weight = 1
+	if req.Importance == nil {
+		normal := 2
+		req.Importance = &normal
+	}
+	if !isValidImportance(*req.Importance) {
+		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "importance must be between 1 and 3")
 	}
 	return req, nil
 }
@@ -213,8 +217,8 @@ func bindUpdateTaskRequest(c echo.Context) (updateTaskRequest, error) {
 	if req.EstimatedMinutes != nil && *req.EstimatedMinutes <= 0 {
 		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "estimated_minutes must be greater than 0")
 	}
-	if req.Weight != nil && *req.Weight <= 0 {
-		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "weight must be greater than 0")
+	if req.Importance != nil && !isValidImportance(*req.Importance) {
+		return req, errorResponse(c, http.StatusBadRequest, "validation_error", "importance must be between 1 and 3")
 	}
 	if req.Status != nil {
 		status := strings.TrimSpace(*req.Status)
@@ -250,7 +254,7 @@ func (h *Handler) taskFromCreateRequest(c echo.Context, userID string, req creat
 	task.StartTime = startTime
 	task.Deadline = deadline
 	task.EstimatedMinutes = req.EstimatedMinutes
-	task.Weight = req.Weight
+	task.Importance = *req.Importance
 	task.Status = model.TaskStatusOpen
 	return task, nil
 }
@@ -291,8 +295,8 @@ func (h *Handler) applyTaskUpdateRequest(c echo.Context, userID string, req upda
 	if req.EstimatedMinutes != nil {
 		task.EstimatedMinutes = *req.EstimatedMinutes
 	}
-	if req.Weight != nil {
-		task.Weight = *req.Weight
+	if req.Importance != nil {
+		task.Importance = *req.Importance
 	}
 	if req.Status != nil {
 		switch *req.Status {
@@ -331,6 +335,10 @@ func isValidTaskStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func isValidImportance(importance int) bool {
+	return importance >= 1 && importance <= 3
 }
 
 func normalizeGroupID(c echo.Context, groupID **string) error {

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     start_time TIMESTAMPTZ,
     deadline TIMESTAMPTZ NOT NULL,
     estimated_minutes INTEGER NOT NULL,
-    weight INTEGER NOT NULL DEFAULT 1,
+    importance INTEGER NOT NULL DEFAULT 2,
     priority_score DOUBLE PRECISION NOT NULL DEFAULT 0,
     status VARCHAR NOT NULL DEFAULT 'open',
     completed_at TIMESTAMPTZ,
