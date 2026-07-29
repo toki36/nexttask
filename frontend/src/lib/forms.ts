@@ -17,5 +17,5 @@ export const initialTaskForm: TaskFormState = {
   start_time: "",
   deadline: "",
   estimated_minutes: "30",
-  weight: "1",
+  importance: "2",
 };

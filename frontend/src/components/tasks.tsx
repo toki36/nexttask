@@ -101,7 +101,7 @@ export function TaskForm({
   onSubmit,
 }: TaskFormProps) {
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(
-    Boolean(form.group_id || form.location_name || form.description || form.start_time),
+    Boolean(form.group_id || form.location_name || form.description || form.start_time || form.importance !== "2"),
   );
 
   return (
@@ -166,27 +166,6 @@ export function TaskForm({
             </div>
           </div>
         </div>
-        <div className="field weight-field">
-          <div className="weight-label">
-            <label htmlFor="task-weight">Weight</label>
-            <output htmlFor="task-weight">{form.weight}</output>
-          </div>
-          <input
-            aria-describedby="task-weight-hint"
-            id="task-weight"
-            min={1}
-            max={10}
-            step={1}
-            type="range"
-            value={form.weight}
-            onChange={(event) => onChange({ ...form, weight: event.target.value })}
-            required
-          />
-          <div className="range-scale" id="task-weight-hint">
-            <span>Low impact</span>
-            <span>High impact</span>
-          </div>
-        </div>
       </div>
 
       <details
@@ -196,6 +175,28 @@ export function TaskForm({
       >
         <summary>More options</summary>
         <div className="form-disclosure-body">
+          <div className="field">
+            <span className="field-label" id="task-importance-label">
+              Importance <span className="optional-label">Optional</span>
+            </span>
+            <div className="importance-options" aria-labelledby="task-importance-label" role="group">
+              {[
+                ["Low", "1"],
+                ["Normal", "2"],
+                ["High", "3"],
+              ].map(([label, importance]) => (
+                <button
+                  aria-pressed={form.importance === importance}
+                  className={form.importance === importance ? "active" : ""}
+                  key={importance}
+                  onClick={() => onChange({ ...form, importance })}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="field">
             <label htmlFor="task-group">Group</label>
             <select

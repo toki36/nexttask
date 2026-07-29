@@ -225,7 +225,7 @@ func TestExportICSSchedules(t *testing.T) {
 		"title":"task should not be exported",
 		"deadline":"2026-06-02T09:00:00+09:00",
 		"estimated_minutes":30,
-		"weight":1
+		"importance":1
 	}`)
 	createTestSchedule(t, e, token, `{
 		"group_id":"`+groupID+`",

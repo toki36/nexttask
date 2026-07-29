@@ -17,11 +17,11 @@ func Score(task model.Task, now time.Time) float64 {
 		return 100
 	}
 
-	estimated := math.Max(float64(task.EstimatedMinutes), 1)
+	estimatedMinutes := math.Max(float64(task.EstimatedMinutes), 1)
 	availableHours := math.Max(minutesUntilDeadline/60, 0.25)
-	urgency := estimated / (availableHours * 60)
-	weight := math.Max(float64(task.Weight), 1) / 10
+	urgency := math.Min(estimatedMinutes/(availableHours*60), 1)
+	importance := math.Min(math.Max(float64(task.Importance-1)/2, 0), 1)
 
-	score := (urgency*80 + weight*20) * 100
+	score := urgency*80 + importance*20
 	return math.Round(math.Min(score, 100)*10) / 10
 }
