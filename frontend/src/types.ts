@@ -44,6 +44,7 @@ export type Task = {
   weight: number;
   priority_score: number;
   status: "open" | "completed";
+  completed_at?: string | null;
 };
 
 export type ApiError = {

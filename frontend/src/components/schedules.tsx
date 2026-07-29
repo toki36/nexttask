@@ -1,25 +1,16 @@
-import type { CSSProperties, FormEvent } from "react";
+import { useRef, useState, type CSSProperties, type FormEvent } from "react";
 import type { Schedule, ScheduleFormState, Task, TaskGroup } from "@/types";
 import {
   dateKey,
   datePart,
   endOfAllDay,
   formatMonthLabel,
-  formatRange,
   isAllDayRange,
   startOfAllDay,
   timePart,
-  withDatePart,
-  withTimePart,
 } from "@/lib/date";
-
-type ScheduleListProps = {
-  groups: TaskGroup[];
-  schedules: Schedule[];
-  onDelete: (id: string) => Promise<void>;
-  onEdit: (schedule: Schedule) => void;
-  loading: boolean;
-};
+import { taskPriorityLevel, type TaskPriorityLevel } from "@/lib/priority";
+import { groupColor } from "@/lib/group-colors";
 
 type ScheduleFormProps = {
   editing: boolean;
@@ -32,12 +23,13 @@ type ScheduleFormProps = {
 };
 
 type ScheduleCalendarProps = {
+  groups: TaskGroup[];
   month: Date;
   schedules: Schedule[];
   tasks: Task[];
-  selectedDate: string;
   onMonthChange: (month: Date) => void;
-  onSelectDate: (date: string) => void;
+  onSelectSchedule: (schedule: Schedule) => void;
+  onSelectTask: (task: Task) => void;
 };
 
 type CalendarCell = {
@@ -51,34 +43,51 @@ type CalendarBar = {
   title: string;
   type: "schedule" | "task";
   allDay: boolean;
+  priorityScore: number;
+  priorityLevel: TaskPriorityLevel;
+  color: string | undefined;
   columnStart: number;
   columnEnd: number;
   lane: number;
 };
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 export function ScheduleCalendar({
+  groups,
   month,
   schedules = [],
   tasks = [],
-  selectedDate,
   onMonthChange,
-  onSelectDate,
+  onSelectSchedule,
+  onSelectTask,
 }: ScheduleCalendarProps) {
   const cells = calendarCells(month);
   const weeks = chunkWeeks(cells);
   const todayKey = dateKey(new Date());
+  const scheduleByID = new Map(schedules.map((schedule) => [schedule.id, schedule]));
+  const taskByID = new Map(tasks.map((task) => [task.id, task]));
 
   return (
     <div className="calendar">
       <div className="calendar-toolbar">
-        <button className="btn ghost small" onClick={() => onMonthChange(addMonths(month, -1))} type="button">
-          Previous
+        <button
+          aria-label="Previous month"
+          className="calendar-nav-button"
+          onClick={() => onMonthChange(addMonths(month, -1))}
+          title="Previous month"
+          type="button"
+        >
+          &#8592;
         </button>
         <h4>{formatMonthLabel(month)}</h4>
-        <button className="btn ghost small" onClick={() => onMonthChange(addMonths(month, 1))} type="button">
-          Next
+        <button
+          aria-label="Next month"
+          className="calendar-nav-button"
+          onClick={() => onMonthChange(addMonths(month, 1))}
+          title="Next month"
+          type="button"
+        >
+          &#8594;
         </button>
       </div>
       <div className="calendar-weekdays">
@@ -88,7 +97,7 @@ export function ScheduleCalendar({
       </div>
       <div className="calendar-grid">
         {weeks.map((week) => {
-          const bars = calendarBarsForWeek(schedules, tasks, week);
+          const bars = calendarBarsForWeek(schedules, tasks, groups, week);
           const laneCount = Math.max(1, ...bars.map((bar) => bar.lane + 1));
 
           return (
@@ -99,86 +108,75 @@ export function ScheduleCalendar({
             >
               <div className="calendar-week-days">
                 {week.map((cell) => {
-                  const active = selectedDate === cell.key;
                   const today = todayKey === cell.key;
                   const hasItems = calendarItemsForDate(schedules, tasks, cell.key).length > 0;
 
                   return (
-                    <button
+                    <div
                       className={[
                         "calendar-day",
                         cell.inMonth ? "" : "muted",
-                        active ? "active" : "",
                         today ? "today" : "",
                         hasItems ? "has-items" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
                       key={cell.key}
-                      onClick={() => onSelectDate(active ? "" : cell.key)}
-                      type="button"
                     >
                       <span className="calendar-date-number">{cell.date.getDate()}</span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
-              <div className="calendar-bars" aria-hidden="true">
-                {bars.map((bar) => (
-                  <div
-                    className={[
-                      "calendar-bar",
-                      bar.type === "task" ? "task" : "",
-                      bar.allDay ? "all-day" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    key={`${bar.type}-${bar.id}-${bar.columnStart}-${bar.columnEnd}`}
-                    style={{
-                      gridColumn: `${bar.columnStart} / ${bar.columnEnd}`,
-                      gridRow: bar.lane + 1,
-                    }}
-                    title={bar.title}
-                  >
-                    {bar.title}
-                  </div>
-                ))}
+              <div className="calendar-bars">
+                {bars.map((bar) => {
+                  const style = {
+                    "--task-color": bar.color,
+                    gridColumn: `${bar.columnStart} / ${bar.columnEnd}`,
+                    gridRow: bar.lane + 1,
+                  } as CSSProperties;
+
+                  if (bar.type === "task") {
+                    const task = taskByID.get(bar.id);
+                    return (
+                      <button
+                        className={`calendar-bar task priority-${bar.priorityLevel}`}
+                        key={`${bar.type}-${bar.id}-${bar.columnStart}-${bar.columnEnd}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (task) onSelectTask(task);
+                        }}
+                        style={style}
+                        title={bar.title}
+                        type="button"
+                      >
+                        {bar.title}
+                      </button>
+                    );
+                  }
+
+                  const schedule = scheduleByID.get(bar.id);
+                  return (
+                    <button
+                      className={["calendar-bar", "schedule", bar.allDay ? "all-day" : ""].filter(Boolean).join(" ")}
+                      key={`${bar.type}-${bar.id}-${bar.columnStart}-${bar.columnEnd}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (schedule) onSelectSchedule(schedule);
+                      }}
+                      style={style}
+                      title={bar.title}
+                      type="button"
+                    >
+                      {bar.title}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
         })}
       </div>
-    </div>
-  );
-}
-
-export function ScheduleList({ groups, schedules, onDelete, onEdit, loading }: ScheduleListProps) {
-  if (schedules.length === 0) {
-    return <div className="empty">No schedules yet</div>;
-  }
-
-  return (
-    <div className="item-list">
-      {schedules.map((schedule) => (
-        <article className="item" key={schedule.id}>
-          <div>
-            <h3 className="item-title">{schedule.title}</h3>
-            <div className="item-meta">
-              <span>{schedule.group_id ? groupName(groups, schedule.group_id) : "No group"}</span>
-              <span>{formatRange(schedule.start_time, schedule.end_time)}</span>
-              {schedule.location_name ? <span>{schedule.location_name}</span> : null}
-            </div>
-          </div>
-          <div className="actions">
-            <button className="btn ghost small" disabled={loading} onClick={() => onEdit(schedule)} type="button">
-              Edit
-            </button>
-            <button className="btn danger small" disabled={loading} onClick={() => onDelete(schedule.id)} type="button">
-              Delete
-            </button>
-          </div>
-        </article>
-      ))}
     </div>
   );
 }
@@ -192,14 +190,11 @@ export function ScheduleForm({
   onChange,
   onSubmit,
 }: ScheduleFormProps) {
+  const timedRangeRef = useRef<{ start: string; end: string } | null>(null);
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(Boolean(form.group_id || form.location_name));
+
   return (
     <form className="stack" onSubmit={onSubmit}>
-      <div className="section-header" style={{ padding: 0, borderBottom: 0 }}>
-        <div>
-          <h3>{editing ? "Edit schedule" : "Create schedule"}</h3>
-          <p>Create a calendar block with an optional group</p>
-        </div>
-      </div>
       <div className="field">
         <label htmlFor="schedule-title">Title</label>
         <input
@@ -209,119 +204,142 @@ export function ScheduleForm({
           required
         />
       </div>
-      <div className="field">
-        <label htmlFor="schedule-group">Group</label>
-        <select
-          id="schedule-group"
-          value={form.group_id}
-          onChange={(event) => onChange({ ...form, group_id: event.target.value })}
-        >
-          <option value="">None</option>
-          {groups.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label htmlFor="schedule-location">Location</label>
-        <input
-          id="schedule-location"
-          value={form.location_name}
-          onChange={(event) => onChange({ ...form, location_name: event.target.value })}
-          placeholder="Optional"
-        />
-      </div>
-      <label className="checkbox-field" htmlFor="schedule-all-day">
-        <input
-          id="schedule-all-day"
-          type="checkbox"
-          checked={form.all_day}
-          onChange={(event) => {
-            const allDay = event.target.checked;
-            const startDate = datePart(form.start_time);
-            onChange({
-              ...form,
-              all_day: allDay,
-              start_time: allDay && startDate ? startOfAllDay(startDate) : form.start_time,
-              end_time: allDay && startDate ? endOfAllDay(startDate) : form.end_time,
-            });
-          }}
-        />
-        <span>All day</span>
-      </label>
-      <div className="form-grid">
-        <div className="field">
-          <label htmlFor="schedule-start-date">{form.all_day ? "Date" : "Start date"}</label>
-          <input
-            id="schedule-start-date"
-            type="date"
-            value={datePart(form.start_time)}
-            onChange={(event) => {
-              const date = event.target.value;
-              onChange({
-                ...form,
-                start_time: form.all_day ? startOfAllDay(date) : withDatePart(form.start_time, date, "09:00"),
-                end_time: form.all_day ? endOfAllDay(date) : form.end_time,
-              });
-            }}
-            required
-          />
+
+      <div className="form-section">
+        <div className="form-section-heading">
+          <h3>When</h3>
+          <label className="switch-field" htmlFor="schedule-all-day">
+            <input
+              checked={form.all_day}
+              id="schedule-all-day"
+              role="switch"
+              type="checkbox"
+              onChange={(event) => {
+                const allDay = event.target.checked;
+                const startDate = datePart(form.start_time);
+                if (allDay && form.start_time && form.end_time) {
+                  timedRangeRef.current = { start: form.start_time, end: form.end_time };
+                }
+                const restored = timedRangeRef.current;
+                onChange({
+                  ...form,
+                  all_day: allDay,
+                  start_time: allDay
+                    ? startOfAllDay(startDate)
+                    : restored?.start ?? (startDate ? `${startDate}T09:00` : ""),
+                  end_time: allDay
+                    ? endOfAllDay(startDate)
+                    : restored?.end ?? (startDate ? `${startDate}T10:00` : ""),
+                });
+              }}
+            />
+            <span className="switch-control" aria-hidden="true" />
+            <span>All day</span>
+          </label>
         </div>
-        {!form.all_day ? (
-          <>
+        {form.all_day ? (
+          <div className="field">
+            <label htmlFor="schedule-date">Date</label>
+            <input
+              id="schedule-date"
+              type="date"
+              value={datePart(form.start_time)}
+              onChange={(event) => {
+                const date = event.target.value;
+                onChange({
+                  ...form,
+                  start_time: startOfAllDay(date),
+                  end_time: endOfAllDay(date),
+                });
+              }}
+              required
+            />
+          </div>
+        ) : (
+          <div className="form-grid">
             <div className="field">
-              <label htmlFor="schedule-start-time">Start time</label>
+              <label htmlFor="schedule-start">Start</label>
               <input
-                id="schedule-start-time"
-                type="time"
-                value={timePart(form.start_time)}
-                onChange={(event) => onChange({ ...form, start_time: withTimePart(form.start_time, event.target.value) })}
-                disabled={!datePart(form.start_time)}
+                id="schedule-start"
+                type="datetime-local"
+                value={form.start_time}
+                onChange={(event) => {
+                  const start = event.target.value;
+                  onChange({
+                    ...form,
+                    start_time: start,
+                    end_time: nextScheduleEnd(start, form.end_time),
+                  });
+                }}
                 required
               />
             </div>
             <div className="field">
-              <label htmlFor="schedule-end-date">End date</label>
+              <label htmlFor="schedule-end">End</label>
               <input
-                id="schedule-end-date"
-                type="date"
-                value={datePart(form.end_time)}
-                onChange={(event) => onChange({ ...form, end_time: withDatePart(form.end_time, event.target.value, "10:00") })}
+                id="schedule-end"
+                type="datetime-local"
+                value={form.end_time}
+                min={form.start_time}
+                onChange={(event) => onChange({ ...form, end_time: event.target.value })}
                 required
               />
             </div>
-            <div className="field">
-              <label htmlFor="schedule-end-time">End time</label>
-              <input
-                id="schedule-end-time"
-                type="time"
-                value={timePart(form.end_time)}
-                onChange={(event) => onChange({ ...form, end_time: withTimePart(form.end_time, event.target.value) })}
-                disabled={!datePart(form.end_time)}
-                required
-              />
-            </div>
-          </>
-        ) : null}
+          </div>
+        )}
       </div>
-      <div className="actions">
-        {editing ? (
-          <button className="btn ghost" onClick={onCancel} type="button">
-            Cancel
-          </button>
-        ) : null}
+
+      <details
+        className="form-disclosure"
+        open={moreOptionsOpen}
+        onToggle={(event) => setMoreOptionsOpen(event.currentTarget.open)}
+      >
+        <summary>More options</summary>
+        <div className="form-disclosure-body">
+          <div className="field">
+            <label htmlFor="schedule-group">Group</label>
+            <select
+              id="schedule-group"
+              value={form.group_id}
+              onChange={(event) => onChange({ ...form, group_id: event.target.value })}
+            >
+              <option value="">None</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="schedule-location">Location <span className="optional-label">Optional</span></label>
+            <input
+              id="schedule-location"
+              value={form.location_name}
+              onChange={(event) => onChange({ ...form, location_name: event.target.value })}
+            />
+          </div>
+        </div>
+      </details>
+
+      <div className="form-actions">
+        <button className="btn ghost" onClick={onCancel} type="button">
+          Cancel
+        </button>
         <button className="btn primary" disabled={loading} type="submit">
-          {editing ? "Update" : "Create"}
+          {editing ? "Update schedule" : "Create schedule"}
         </button>
       </div>
     </form>
   );
 }
 
-function groupName(groups: TaskGroup[], id: string) {
-  return groups.find((group) => group.id === id)?.name ?? "Ungrouped";
+function nextScheduleEnd(start: string, currentEnd: string) {
+  if (!start) return currentEnd;
+  if (currentEnd && new Date(currentEnd).getTime() > new Date(start).getTime()) return currentEnd;
+
+  const end = new Date(new Date(start).getTime() + 60 * 60 * 1000);
+  return toLocalDateTime(end.toISOString());
 }
 
 function calendarCells(month: Date): CalendarCell[] {
@@ -360,7 +378,12 @@ function calendarItemsForDate(schedules: Schedule[], tasks: Task[], targetDate: 
   return [...matchingSchedules, ...matchingTasks];
 }
 
-function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: CalendarCell[]) {
+function calendarBarsForWeek(
+  schedules: Schedule[],
+  tasks: Task[],
+  groups: TaskGroup[],
+  week: CalendarCell[],
+): CalendarBar[] {
   const weekStart = startOfDate(week[0].date);
   const weekEnd = startOfDate(week[6].date);
   const calendarItems = [
@@ -369,6 +392,9 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
       title: schedule.title,
       type: "schedule" as const,
       allDay: isAllDayRange(toLocalDateTime(schedule.start_time), toLocalDateTime(schedule.end_time)),
+      priorityScore: Number.NEGATIVE_INFINITY,
+      priorityLevel: "normal" as const,
+      color: undefined,
       start: scheduleDateStart(schedule),
       end: scheduleDateEnd(schedule),
     })),
@@ -377,6 +403,9 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
       title: task.title,
       type: "task" as const,
       allDay: false,
+      priorityScore: task.priority_score,
+      priorityLevel: taskPriorityLevel(task.priority_score),
+      color: groupColor(groups, task.group_id),
       ...taskDateRange(task),
     })),
   ];
@@ -392,6 +421,9 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
         title: item.title,
         type: item.type,
         allDay: item.allDay,
+        priorityScore: item.priorityScore,
+        priorityLevel: item.priorityLevel,
+        color: item.color,
         columnStart: daysBetween(weekStart, visibleStart) + 1,
         columnEnd: daysBetween(weekStart, visibleEnd) + 2,
         lane: 0,
@@ -399,7 +431,11 @@ function calendarBarsForWeek(schedules: Schedule[], tasks: Task[], week: Calenda
     })
     .filter((bar): bar is CalendarBar => bar !== null)
     .sort((a, b) => {
+      if (a.type === "task" && b.type === "task" && a.priorityScore !== b.priorityScore) {
+        return b.priorityScore - a.priorityScore;
+      }
       if (a.columnStart !== b.columnStart) return a.columnStart - b.columnStart;
+      if (a.type !== b.type) return a.type === "schedule" ? -1 : 1;
       return b.columnEnd - b.columnStart - (a.columnEnd - a.columnStart);
     });
 

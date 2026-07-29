@@ -1,18 +1,21 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AuthView } from "@/components/auth-view";
 import { Modal, StatusMessage } from "@/components/common";
 import { GroupsSidebar } from "@/components/groups-sidebar";
-import { ScheduleCalendar, ScheduleForm, ScheduleList } from "@/components/schedules";
+import { ScheduleDetail } from "@/components/schedule-detail";
+import { ScheduleCalendar, ScheduleForm } from "@/components/schedules";
+import { TaskDetail } from "@/components/task-detail";
 import { TaskForm, TaskList } from "@/components/tasks";
 import { apiBase, apiRequest, errorMessage, isUnauthorizedError, tokenKey, userKey } from "@/lib/api";
-import { datePart, formatDateTime, isAllDayRange, isValidDateRange, toDateTimeLocal, toRFC3339 } from "@/lib/date";
+import { isAllDayRange, isValidDateRange, toDateTimeLocal, toRFC3339 } from "@/lib/date";
 import { initialScheduleForm, initialTaskForm } from "@/lib/forms";
 import { savedToken, savedUser } from "@/lib/storage";
 import type { AuthMode, AuthResponse, Schedule, Task, TaskGroup, User } from "@/types";
 
-type ActiveModal = "group" | "task" | "task-detail" | "schedule" | null;
+type ActiveModal = "group" | "task" | "task-detail" | "schedule" | "schedule-detail" | null;
+type MobileWorkspaceView = "tasks" | "calendar";
 
 export function Dashboard() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -24,12 +27,15 @@ export function Dashboard() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
-  const [selectedScheduleDate, setSelectedScheduleDate] = useState("");
   const [selectedGroupID, setSelectedGroupID] = useState("all");
+  const [taskStatusView, setTaskStatusView] = useState<Task["status"]>("open");
+  const [mobileWorkspaceView, setMobileWorkspaceView] = useState<MobileWorkspaceView>("tasks");
+  const [undoTaskID, setUndoTaskID] = useState<string | null>(null);
   const [groupName, setGroupName] = useState("");
   const [scheduleForm, setScheduleForm] = useState(initialScheduleForm);
   const [taskForm, setTaskForm] = useState(initialTaskForm);
   const [editingScheduleID, setEditingScheduleID] = useState<string | null>(null);
+  const [selectedScheduleID, setSelectedScheduleID] = useState<string | null>(null);
   const [editingTaskID, setEditingTaskID] = useState<string | null>(null);
   const [selectedTaskID, setSelectedTaskID] = useState<string | null>(null);
   const [editingGroupID, setEditingGroupID] = useState<string | null>(null);
@@ -39,39 +45,40 @@ export function Dashboard() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const selectedGroup = useMemo(
-    () => groups.find((group) => group.id === selectedGroupID) ?? null,
-    [groups, selectedGroupID],
-  );
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   const visibleSchedules = useMemo(() => {
     if (selectedGroupID === "all") return schedules;
     return schedules.filter((schedule) => schedule.group_id === selectedGroupID);
   }, [schedules, selectedGroupID]);
 
-  const selectedDateSchedules = useMemo(() => {
-    if (!selectedScheduleDate) return visibleSchedules;
-    return visibleSchedules.filter((schedule) => datePart(toDateTimeLocal(schedule.start_time)) === selectedScheduleDate);
-  }, [selectedScheduleDate, visibleSchedules]);
-
-  const visibleTasks = useMemo(() => {
-    if (selectedGroupID === "all") return tasks;
-    return tasks.filter((task) => task.group_id === selectedGroupID);
+  const scopedTasks = useMemo(() => {
+    const filteredTasks =
+      selectedGroupID === "all" ? tasks : tasks.filter((task) => task.group_id === selectedGroupID);
+    return filteredTasks;
   }, [tasks, selectedGroupID]);
+
+  const openTasks = useMemo(
+    () => scopedTasks.filter((task) => task.status === "open").sort(compareTasksByPriority),
+    [scopedTasks],
+  );
+
+  const completedTasks = useMemo(
+    () => scopedTasks.filter((task) => task.status === "completed").sort(compareCompletedTasks),
+    [scopedTasks],
+  );
+
+  const visibleTasks = taskStatusView === "open" ? openTasks : completedTasks;
 
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedTaskID) ?? null,
     [selectedTaskID, tasks],
   );
 
-  const groupScheduleCounts = useMemo(() => {
-    return schedules.reduce<Record<string, number>>((counts, schedule) => {
-      if (!schedule.group_id) return counts;
-      counts[schedule.group_id] = (counts[schedule.group_id] ?? 0) + 1;
-      return counts;
-    }, {});
-  }, [schedules]);
+  const selectedSchedule = useMemo(
+    () => schedules.find((schedule) => schedule.id === selectedScheduleID) ?? null,
+    [schedules, selectedScheduleID],
+  );
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -98,7 +105,7 @@ export function Dashboard() {
       if (selectedGroupID !== "all" && !nextGroups.some((group) => group.id === selectedGroupID)) {
         setSelectedGroupID("all");
       }
-      setStatus("Synced");
+      setStatus("");
     } catch (err) {
       if (isUnauthorizedError(err)) {
         window.localStorage.removeItem(tokenKey);
@@ -126,6 +133,34 @@ export function Dashboard() {
     }, 0);
     return () => window.clearTimeout(id);
   }, [loadWorkspace, token]);
+
+  useEffect(() => {
+    if (!status) return;
+    const id = window.setTimeout(() => {
+      setStatus("");
+      setUndoTaskID(null);
+    }, undoTaskID ? 5000 : 2600);
+    return () => window.clearTimeout(id);
+  }, [status, undoTaskID]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+
+    function closeSettings(event: MouseEvent | KeyboardEvent) {
+      if (event instanceof KeyboardEvent) {
+        if (event.key === "Escape") setSettingsOpen(false);
+        return;
+      }
+      if (!settingsRef.current?.contains(event.target as Node)) setSettingsOpen(false);
+    }
+
+    document.addEventListener("mousedown", closeSettings);
+    document.addEventListener("keydown", closeSettings);
+    return () => {
+      document.removeEventListener("mousedown", closeSettings);
+      document.removeEventListener("keydown", closeSettings);
+    };
+  }, [settingsOpen]);
 
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -182,7 +217,6 @@ export function Dashboard() {
       setScheduleForm((current) => ({ ...current, group_id: group.id }));
       setTaskForm((current) => ({ ...current, group_id: group.id }));
       setCalendarMonth(new Date());
-      setSelectedScheduleDate("");
       setActiveModal(null);
       setStatus("Group created");
     } catch (err) {
@@ -195,7 +229,7 @@ export function Dashboard() {
   async function deleteGroup(groupID: string) {
     const group = groups.find((item) => item.id === groupID);
     const name = group?.name ?? "this group";
-    if (!window.confirm(`${name} will be deleted. Linked schedules will move to No group.`)) return;
+    if (!window.confirm(`${name} will be deleted. Linked tasks and schedules will move to No group.`)) return;
 
     setLoading(true);
     setError("");
@@ -308,6 +342,8 @@ export function Dashboard() {
       await apiRequest<void>(`/schedules/${scheduleID}`, { method: "DELETE" }, token);
       setSchedules((current) => current.filter((schedule) => schedule.id !== scheduleID));
       if (editingScheduleID === scheduleID) resetScheduleForm();
+      if (selectedScheduleID === scheduleID) setSelectedScheduleID(null);
+      setActiveModal(null);
       setStatus("Schedule deleted");
     } catch (err) {
       setError(errorMessage(err));
@@ -318,6 +354,14 @@ export function Dashboard() {
 
   async function saveTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (
+      taskForm.start_time &&
+      taskForm.deadline &&
+      new Date(taskForm.deadline).getTime() <= new Date(taskForm.start_time).getTime()
+    ) {
+      setError("Due must be after start");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -361,12 +405,32 @@ export function Dashboard() {
         body: JSON.stringify({ status: statusValue }),
       }, token);
       setTasks((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-      setStatus(statusValue === "completed" ? "Task completed" : "Task reopened");
+      if (statusValue === "completed") {
+        setUndoTaskID(updated.id);
+        setSelectedTaskID(null);
+        setActiveModal(null);
+        setStatus("Task completed");
+      } else {
+        setUndoTaskID(null);
+        setTaskStatusView("open");
+        setSelectedTaskID(null);
+        setActiveModal(null);
+        setStatus("Task reopened");
+      }
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
+  }
+
+  function undoTaskCompletion() {
+    const task = tasks.find((item) => item.id === undoTaskID);
+    if (!task || task.status !== "completed") {
+      setUndoTaskID(null);
+      return;
+    }
+    void updateTaskStatus(task, "open");
   }
 
   async function deleteTask(taskID: string) {
@@ -377,6 +441,7 @@ export function Dashboard() {
     try {
       await apiRequest<void>(`/tasks/${taskID}`, { method: "DELETE" }, token);
       setTasks((current) => current.filter((task) => task.id !== taskID));
+      if (undoTaskID === taskID) setUndoTaskID(null);
       if (editingTaskID === taskID) resetTaskForm();
       if (selectedTaskID === taskID) closeTaskDetail();
       setStatus("Task deleted");
@@ -464,6 +529,7 @@ export function Dashboard() {
   }
 
   function editSchedule(schedule: Schedule) {
+    setSelectedScheduleID(null);
     const startTime = toDateTimeLocal(schedule.start_time);
     const endTime = toDateTimeLocal(schedule.end_time);
     setEditingScheduleID(schedule.id);
@@ -478,6 +544,16 @@ export function Dashboard() {
     });
   }
 
+  function openScheduleDetail(schedule: Schedule) {
+    setSelectedScheduleID(schedule.id);
+    setActiveModal("schedule-detail");
+  }
+
+  function closeScheduleDetail() {
+    setSelectedScheduleID(null);
+    setActiveModal(null);
+  }
+
   function resetScheduleForm() {
     setEditingScheduleID(null);
     setScheduleForm({
@@ -487,10 +563,16 @@ export function Dashboard() {
   }
 
   function openScheduleForm() {
+    const start = new Date();
+    start.setSeconds(0, 0);
+    start.setMinutes(Math.ceil(start.getMinutes() / 30) * 30);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
     setEditingScheduleID(null);
     setScheduleForm({
       ...initialScheduleForm,
       group_id: selectedGroupID === "all" ? "" : selectedGroupID,
+      start_time: toLocalInput(start),
+      end_time: toLocalInput(end),
     });
     setActiveModal("schedule");
   }
@@ -518,7 +600,6 @@ export function Dashboard() {
     setEditingScheduleID(null);
     setSelectedTaskID(null);
     setActiveModal(null);
-    setSelectedScheduleDate("");
   }
 
   function refreshWorkspace() {
@@ -573,17 +654,13 @@ export function Dashboard() {
         <div className="topbar-inner">
           <div className="brand">
             <div className="brand-mark">N</div>
-            <div>
-              <h1 className="brand-title">NextTask</h1>
-              <p className="brand-subtitle">{selectedGroup ? selectedGroup.name : "All groups"}</p>
-            </div>
+            <h1 className="brand-title">NextTask</h1>
           </div>
           <div className="user-row">
-            <span className="user-email">{user.email}</span>
-            <div className="settings-menu">
+            <div className="settings-menu" ref={settingsRef}>
               <button
                 aria-expanded={settingsOpen}
-                aria-label="Open settings menu"
+                aria-label={settingsOpen ? "Close settings menu" : "Open settings menu"}
                 className="icon-button"
                 onClick={() => setSettingsOpen((current) => !current)}
                 type="button"
@@ -593,18 +670,18 @@ export function Dashboard() {
                 <span />
               </button>
               {settingsOpen ? (
-                <div className="settings-panel">
+                <div className="settings-panel" role="menu">
                   <div className="settings-panel-header">
                     <span>Settings</span>
                     <small>{user.email}</small>
                   </div>
-                  <button disabled={loading} onClick={refreshWorkspace} type="button">
-                    Update workspace
+                  <button disabled={loading} onClick={refreshWorkspace} role="menuitem" type="button">
+                    Sync data
                   </button>
-                  <button disabled={loading} onClick={downloadICS} type="button">
-                    Export ICS
+                  <button disabled={loading} onClick={downloadICS} role="menuitem" type="button">
+                    Export calendar (.ics)
                   </button>
-                  <button className="danger-text" onClick={logout} type="button">
+                  <button className="danger-text" onClick={logout} role="menuitem" type="button">
                     Log out
                   </button>
                 </div>
@@ -613,61 +690,93 @@ export function Dashboard() {
           </div>
         </div>
       </header>
+      {status || error ? (
+        <div className={error ? "status-toast error" : "status-toast"}>
+          <StatusMessage status={status} error={error} />
+          {undoTaskID && !error ? (
+            <button className="status-toast-action" disabled={loading} onClick={undoTaskCompletion} type="button">
+              Undo
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="page">
         <div className="dashboard">
           <GroupsSidebar
-            editingGroupID={editingGroupID}
-            groupEditName={groupEditName}
-            groupScheduleCounts={groupScheduleCounts}
             groups={groups}
             loading={loading}
-            schedulesCount={schedules.length}
-            selectedGroup={selectedGroup}
             selectedGroupID={selectedGroupID}
-            onCancelGroupEdit={cancelGroupEdit}
             onDeleteGroup={deleteGroup}
-            onGroupEditNameChange={setGroupEditName}
             onOpenCreateGroup={openGroupForm}
-            onSaveGroupName={saveGroupName}
             onSelectGroup={selectGroup}
             onStartGroupEdit={startGroupEdit}
           />
 
           <section className="workarea">
-            <div className="toolbar">
-              <div>
-                <h2 className="workspace-title">Workspace</h2>
-                <p className="workspace-subtitle">View tasks and schedules side by side</p>
-              </div>
-              <StatusMessage status={status} error={error} />
+            <div className="mobile-workspace-tabs" aria-label="Workspace view" role="tablist">
+              <button
+                aria-selected={mobileWorkspaceView === "tasks"}
+                className={mobileWorkspaceView === "tasks" ? "active" : ""}
+                onClick={() => setMobileWorkspaceView("tasks")}
+                role="tab"
+                type="button"
+              >
+                Tasks
+              </button>
+              <button
+                aria-selected={mobileWorkspaceView === "calendar"}
+                className={mobileWorkspaceView === "calendar" ? "active" : ""}
+                onClick={() => setMobileWorkspaceView("calendar")}
+                role="tab"
+                type="button"
+              >
+                Calendar
+              </button>
             </div>
-
             <div className="workspace-columns">
-              <div className="workspace-column">
+              <div className={mobileWorkspaceView === "tasks" ? "workspace-column" : "workspace-column mobile-inactive"}>
                 <div className="section-header">
-                  <div>
-                    <h3>Tasks</h3>
-                    <p>Manage work on the left</p>
+                  <h2>Tasks</h2>
+                  <div className="task-header-actions">
+                    <div className="task-view-tabs" aria-label="Task status" role="tablist">
+                      <button
+                        aria-selected={taskStatusView === "open"}
+                        className={taskStatusView === "open" ? "active" : ""}
+                        onClick={() => setTaskStatusView("open")}
+                        role="tab"
+                        type="button"
+                      >
+                        Open
+                      </button>
+                      <button
+                        aria-selected={taskStatusView === "completed"}
+                        className={taskStatusView === "completed" ? "active" : ""}
+                        onClick={() => setTaskStatusView("completed")}
+                        role="tab"
+                        type="button"
+                      >
+                        Completed
+                      </button>
+                    </div>
+                    <button className="btn primary small" disabled={loading} onClick={openTaskForm} type="button">
+                      New task
+                    </button>
                   </div>
-                  <button className="btn primary small" disabled={loading} onClick={openTaskForm} type="button">
-                    New task
-                  </button>
                 </div>
                 <div className="list-pane">
                   <TaskList
+                    groups={groups}
+                    status={taskStatusView}
                     tasks={visibleTasks}
                     onSelect={openTaskDetail}
                   />
                 </div>
               </div>
 
-              <div className="workspace-column">
+              <div className={mobileWorkspaceView === "calendar" ? "workspace-column" : "workspace-column mobile-inactive"}>
                 <div className="section-header">
-                  <div>
-                    <h3>Schedules</h3>
-                    <p>Manage calendar schedules on the right</p>
-                  </div>
+                  <h2>Calendar</h2>
                   <button
                     className="btn primary small"
                     disabled={loading}
@@ -679,27 +788,13 @@ export function Dashboard() {
                 </div>
                 <div className="list-pane">
                   <ScheduleCalendar
+                    groups={groups}
                     month={calendarMonth}
                     schedules={visibleSchedules}
-                    tasks={visibleTasks}
-                    selectedDate={selectedScheduleDate}
+                    tasks={openTasks}
                     onMonthChange={setCalendarMonth}
-                    onSelectDate={setSelectedScheduleDate}
-                  />
-                  {selectedScheduleDate ? (
-                    <div className="calendar-filter-row">
-                      <span>{selectedScheduleDate} schedules</span>
-                      <button className="btn ghost small" onClick={() => setSelectedScheduleDate("")} type="button">
-                        Clear
-                      </button>
-                    </div>
-                  ) : null}
-                  <ScheduleList
-                    groups={groups}
-                    schedules={selectedDateSchedules}
-                    onDelete={deleteSchedule}
-                    onEdit={editSchedule}
-                    loading={loading}
+                    onSelectSchedule={openScheduleDetail}
+                    onSelectTask={openTaskDetail}
                   />
                 </div>
               </div>
@@ -708,7 +803,7 @@ export function Dashboard() {
         </div>
       </div>
       {activeModal === "group" ? (
-        <Modal title="New group" onClose={closeGroupForm}>
+        <Modal title="New group" onClose={closeGroupForm} size="small">
           <form className="stack" onSubmit={createGroup}>
             <div className="field">
               <label htmlFor="group-name">Group name</label>
@@ -720,7 +815,7 @@ export function Dashboard() {
                 required
               />
             </div>
-            <div className="actions">
+            <div className="form-actions">
               <button className="btn ghost" onClick={closeGroupForm} type="button">
                 Cancel
               </button>
@@ -731,74 +826,52 @@ export function Dashboard() {
           </form>
         </Modal>
       ) : null}
+      {editingGroupID ? (
+        <Modal title="Rename group" onClose={cancelGroupEdit} size="small">
+          <form className="stack" onSubmit={saveGroupName}>
+            <div className="field">
+              <label htmlFor="group-edit-name">Group name</label>
+              <input
+                id="group-edit-name"
+                value={groupEditName}
+                onChange={(event) => setGroupEditName(event.target.value)}
+                required
+              />
+            </div>
+            <div className="form-actions">
+              <button className="btn ghost" onClick={cancelGroupEdit} type="button">
+                Cancel
+              </button>
+              <button className="btn primary" disabled={loading || !groupEditName.trim()} type="submit">
+                Save
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
       {activeModal === "task-detail" && selectedTask ? (
         <Modal title={selectedTask.title} onClose={closeTaskDetail}>
-          <div className="stack">
-            <div className="detail-grid">
-              <div>
-                <span className="detail-label">Status</span>
-                <strong>{selectedTask.status === "completed" ? "Done" : "Open"}</strong>
-              </div>
-              <div>
-                <span className="detail-label">Start</span>
-                <strong>{selectedTask.start_time ? formatDateTime(selectedTask.start_time) : "Not set"}</strong>
-              </div>
-              <div>
-                <span className="detail-label">Due</span>
-                <strong>{formatDateTime(selectedTask.deadline)}</strong>
-              </div>
-              <div>
-                <span className="detail-label">Group</span>
-                <strong>
-                  {selectedTask.group_id
-                    ? groups.find((group) => group.id === selectedTask.group_id)?.name ?? "Ungrouped"
-                    : "No group"}
-                </strong>
-              </div>
-              <div>
-                <span className="detail-label">Estimate</span>
-                <strong>{selectedTask.estimated_minutes}min</strong>
-              </div>
-              <div>
-                <span className="detail-label">Weight</span>
-                <strong>{selectedTask.weight}</strong>
-              </div>
-              <div>
-                <span className="detail-label">Priority</span>
-                <strong>{selectedTask.priority_score.toFixed(1)}</strong>
-              </div>
-            </div>
-            {selectedTask.location_name ? (
-              <div className="detail-block">
-                <span className="detail-label">Location</span>
-                <p>{selectedTask.location_name}</p>
-              </div>
-            ) : null}
-            {selectedTask.description ? (
-              <div className="detail-block">
-                <span className="detail-label">Description</span>
-                <p>{selectedTask.description}</p>
-              </div>
-            ) : null}
-            <div className="actions">
-              <button className="btn ghost" disabled={loading} onClick={() => editTask(selectedTask)} type="button">
-                Edit
-              </button>
-              <button
-                className="btn ghost"
-                disabled={loading}
-                onClick={() =>
-                  void updateTaskStatus(selectedTask, selectedTask.status === "completed" ? "open" : "completed")
-                }
-                type="button"
-              >
-                {selectedTask.status === "completed" ? "Reopen" : "Done"}
-              </button>
-              <button className="btn danger" disabled={loading} onClick={() => void deleteTask(selectedTask.id)} type="button">
-                Delete
-              </button>
-            </div>
-          </div>
+          <TaskDetail
+            groups={groups}
+            loading={loading}
+            task={selectedTask}
+            onDelete={deleteTask}
+            onEdit={editTask}
+            onToggleStatus={(task) =>
+              updateTaskStatus(task, task.status === "completed" ? "open" : "completed")
+            }
+          />
+        </Modal>
+      ) : null}
+      {activeModal === "schedule-detail" && selectedSchedule ? (
+        <Modal title={selectedSchedule.title} onClose={closeScheduleDetail} size="small">
+          <ScheduleDetail
+            groups={groups}
+            loading={loading}
+            schedule={selectedSchedule}
+            onDelete={deleteSchedule}
+            onEdit={editSchedule}
+          />
         </Modal>
       ) : null}
       {activeModal === "task" ? (
@@ -829,4 +902,18 @@ export function Dashboard() {
       ) : null}
     </main>
   );
+}
+
+function compareTasksByPriority(a: Task, b: Task) {
+  if (b.priority_score !== a.priority_score) return b.priority_score - a.priority_score;
+  return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+}
+
+function compareCompletedTasks(a: Task, b: Task) {
+  return new Date(b.completed_at ?? b.deadline).getTime() - new Date(a.completed_at ?? a.deadline).getTime();
+}
+
+function toLocalInput(date: Date) {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
 }
